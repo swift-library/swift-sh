@@ -1,0 +1,68 @@
+name: CI
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - '**.swift'
+      - .swift-format
+      - Examples/**
+      - Package.swift
+      - Package.resolved
+      - .github/workflows/ci.yml
+  workflow_dispatch:
+  schedule:
+    - cron: '3 3 * * 0'  # 3:03 AM, every Sunday
+jobs:
+  format:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v6
+      - uses: swift-actions/setup-swift@v2
+      - name: Show Swift version
+        run: swift --version
+      - name: Show swift-format version
+        run: swift-format --version
+      - name: Check formatting
+        run: |
+          swift-format lint --strict --configuration .swift-format \
+            Package.swift \
+            $(find Sources Tests Examples -type f \( -name '*.swift' -o ! -name '*.*' \) -print)
+
+  macos:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-26
+          - macos-15
+          - macos-14
+    steps:
+      - uses: actions/checkout@v6
+      - uses: swift-actions/setup-swift@v2
+      - name: Show Swift version
+        run: swift --version
+      - name: Build
+        run: swift build
+      - name: Test
+        run: swift test
+
+  linux:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: swift-actions/setup-swift@v2
+      - name: Show Swift version
+        run: swift --version
+      - name: Build
+        run: swift build
+      - name: Test
+        run: swift test

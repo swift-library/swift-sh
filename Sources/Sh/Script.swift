@@ -1,0 +1,318 @@
+import Foundation
+import Path
+import StreamReader
+import Version
+
+public class Script {
+  let input: Input
+  let deps: [ImportSpecification]
+  let args: [String]
+  let mainStyle: ExecutableTargetMainStyle
+
+  private let inputPathHash: String?
+
+  public var name: String {
+    switch input {
+    case .path(let path):
+      return path.basename(dropExtension: true)
+    case .string(let name, _):
+      return name
+    }
+  }
+
+  public var buildDirectory: Path {
+    switch input {
+    case .path:
+      return Path.build / inputPathHash!
+    case .string:
+      return Path.build / name
+    }
+  }
+
+  public var mainSwift: Path {
+    switch mainStyle {
+    case .mainAttribute: return buildDirectory / "Root.swift"
+    case .topLevelCode: return buildDirectory / "main.swift"
+    }
+  }
+
+  public enum Input {
+    case path(Path)
+    case string(name: String, content: String)
+  }
+
+  public init(
+    for: Input, style: ExecutableTargetMainStyle, dependencies: [ImportSpecification],
+    arguments: [String] = []
+  ) {
+    input = `for`
+    deps = dependencies
+    args = arguments
+    mainStyle = style
+
+    // cache hash if appropriate since accessed often and involves work
+    if case Input.path(let path) = input {
+      self.inputPathHash = path.resolvedHash
+    } else {
+      self.inputPathHash = nil
+    }
+  }
+
+  var depsCachePath: Path {
+    return buildDirectory / "deps.json"
+  }
+
+  var depsCache: [ImportSpecification]? {
+    do {
+      guard depsCachePath.isFile else { throw CocoaError.error(.coderInvalidValue) }
+      let data = try Data(contentsOf: depsCachePath)
+      return try JSONDecoder().decode([ImportSpecification].self, from: data)
+    } catch {
+      return nil
+    }
+  }
+
+  public func write() throws {
+    //TODO dependency module names might not correspond the products that packages export, must parse `swift package dump-package` output
+    if depsCache != deps || (manifestToolsMajorVersion ?? 0) < 6 {
+      // this check because SwiftPM has to reparse the manifest if we rewrite it
+      // this is noticably slow, so avoid it if possible
+      var macOS: String {
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        return ".macOS(\"\(version.majorVersion).\(version.minorVersion)\")"
+      }
+      try buildDirectory.mkdir(.p)
+      let sourceFile: String
+      switch mainStyle {
+      case .mainAttribute:
+        sourceFile = "Root.swift"
+      case .topLevelCode:
+        sourceFile = "main.swift"
+      }
+      try """
+      // swift-tools-version:6.3
+      import PackageDescription
+
+      let package = Package(
+          name: "\(name)",
+          products: [
+              .executable(name: "\(name)", targets: ["\(name)"])
+          ],
+          dependencies: [
+              \(deps.packageLines)
+          ],
+          targets: [
+              .executableTarget(
+                  name: "\(name)",
+                  dependencies: [\(deps.mainTargetDependencies)],
+                  path: ".",
+                  exclude: ["deps.json"],
+                  sources: ["\(sourceFile)"]
+              )
+          ],
+          swiftLanguageModes: [.v6]
+      )
+
+      #if os(macOS)
+      package.platforms = [
+          \(macOS)
+      ]
+      #endif
+
+      """.write(to: manifestPath)
+      try JSONEncoder().encode(deps).write(to: depsCachePath)
+    }
+    switch input {
+    case .path(let userPath):
+      func mklink() throws { try userPath.symlink(as: mainSwift) }
+      switch mainStyle {
+      case .mainAttribute:
+        try mainSwift.delete()
+        let reader = try StreamReader(path: userPath)
+        let source = reader.compactMap { line in
+          line.contains("#!") ? .none : line
+        }.joined(separator: "\n")
+        try source.write(to: mainSwift)
+      case .topLevelCode:
+        if let linkdst = try? mainSwift.readlink(), linkdst != userPath {
+          try mainSwift.delete()
+          try mklink()
+        } else if !mainSwift.exists {
+          try mklink()
+        }
+      }
+    case .string(_, let contents):
+      if let currentContents = try? String(contentsOf: mainSwift), currentContents == contents {
+        break
+      }
+      try contents.write(to: mainSwift)
+    }
+  }
+
+  var binaryPath: Path {
+    return buildDirectory / ".build/debug" / name
+  }
+
+  var manifestPath: Path {
+    return buildDirectory.join("Package.swift")
+  }
+
+  var manifestToolsMajorVersion: Int? {
+    guard let line = (try? StreamReader(path: manifestPath))?.pop() else { return nil }
+    return line.capture(for: "//\\sswift-tools-version:\\s*(\\d+)\\.\\d+").flatMap({ Int($0) })
+  }
+
+  var scriptChanged: Bool {
+    switch input {
+    case .string:
+      // if we don’t have a file we can’t verify that the script is unchanged
+      return true
+
+    case .path(let path):
+      guard let manifestVersion = manifestToolsMajorVersion else { return true }
+
+      // if the manifest version is less than 6 the script was built with an older generated package shape
+      guard manifestVersion >= 6 else { return true }
+
+      // if the Swift version is less than 5 we are not an ABI safe environment
+      guard let swiftVersion = Float(swiftVersion), swiftVersion >= 5 else { return true }
+
+      // compute latest mtime for script and local dependencies
+      var mtimes = [path.mtime]
+      for dep in deps {
+        switch dep.dependencyName {
+        case .local(let path):
+          for path in path.find() {
+            mtimes.append(path.mtime)
+          }
+        case .url, .scp, .github:
+          ()
+        }
+      }
+      let mtime = mtimes.compactMap({ $0 }).max()
+
+      if let t1 = mtime, let t2 = binaryPath.mtime {
+        return t1 > t2
+      } else {
+        return true
+      }
+    }
+  }
+
+  public func run() throws -> Never {
+    if scriptChanged {
+      try write()
+      // first arg has to be same as executable path
+      let task = Process()
+      task.launchPath = Path.swift.string
+      task.arguments = ["build", "-Xswiftc", "-suppress-warnings"]
+      task.currentDirectoryPath = buildDirectory.string
+
+      #if !os(Linux)
+        task.standardOutput = task.standardError
+      #else
+        // setting it stderr or `nil` CRASHES ffs
+        task.standardOutput = Pipe()
+      #endif
+      try task.launchAndWaitForSuccessfulExit()
+    }
+    try exec(arg0: binaryPath.string, args: args)
+  }
+}
+
+extension Path {
+  static var swift: Path {
+    if let path = Path.which("swift") {
+      return path
+    } else {
+      let task = Process()
+      task.launchPath = "/usr/bin/which"
+      task.arguments = ["swift"]
+
+      // Drop SDKROOT so /usr/bin/which resolves the active Swift toolchain.
+      task.environment = ProcessInfo.processInfo.environment.filter { $0.key != "SDKROOT" }
+
+      let str = (try? task.runSync())?.stdout.string?.chuzzled() ?? "/usr/bin/swift"
+      return Path.root / str
+    }
+  }
+}
+
+extension String {
+  func chuzzled() -> String? {
+    let s = trimmingCharacters(in: .whitespacesAndNewlines)
+    return s.isEmpty ? nil : s
+  }
+}
+
+extension Path {
+  public static var build: Path {
+    if let path = ProcessInfo.processInfo.environment["XDG_CACHE_HOME"] {
+      return Path.root / path / "swift-sh"
+    }
+    #if os(macOS)
+      return Path.home / "Library/Developer/swift-sh.cache"
+    #else
+      return Path.home / ".cache/swift-sh"
+    #endif
+  }
+}
+
+extension String {
+  fileprivate func capture(for pattern: String) -> Substring? {
+    guard let rx = try? NSRegularExpression(pattern: pattern) else { return nil }
+    guard let match = rx.firstMatch(in: self) else { return nil }
+    guard match.numberOfRanges >= 1 else { return nil }
+    return self[match.range(at: 1)]
+  }
+}
+
+let swiftVersion: String = {
+  do {
+    let task = Process()
+    task.launchPath = Path.swift.string
+    task.arguments = ["--version"]
+    let (stdout, _) = try task.runSync(tee: false)  // ignore stderr
+    if let input = stdout.string,
+      let range = input.range(
+        of: " version \\d+\\.\\d+",
+        options: .regularExpression),
+      let found = input[range].split(separator: " ").last
+    {
+      return String(found)
+    }
+  } catch {
+    assert(false)  // shouldn't happen during testing so let’s catch it
+  }
+  #if swift(>=6.3)
+    return "6.3"
+  #elseif swift(>=6.2)
+    return "6.2"
+  #elseif swift(>=6.1)
+    return "6.1"
+  #elseif swift(>=6.0)
+    return "6.0"
+  #elseif swift(>=5.9)
+    return "5.9"
+  #elseif swift(>=5.8)
+    return "5.8"
+  #elseif swift(>=5.7)
+    return "5.7"
+  #elseif swift(>=5.6)
+    return "5.6"
+  #elseif swift(>=5.5)
+    return "5.5"
+  #elseif swift(>=5.4)
+    return "5.4"
+  #elseif swift(>=5.3)
+    return "5.3"
+  #elseif swift(>=5.2)
+    return "5.2"
+  #elseif swift(>=5.1)
+    return "5.1"
+  #elseif swift(>=5)
+    return "5.0"
+  #else
+    return "4.2"
+  #endif
+}()
