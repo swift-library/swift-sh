@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Unlicense
+
+"""Verify the Release CLI locally or from a fresh remote source checkout."""
+
+import argparse
+import json
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--repository")
+reference = parser.add_mutually_exclusive_group()
+reference.add_argument("--revision")
+reference.add_argument("--version")
+args = parser.parse_args()
+if bool(args.repository) != bool(args.revision or args.version):
+    parser.error("Use --repository with --revision or --version")
+root = Path(__file__).resolve().parent.parent
+with tempfile.TemporaryDirectory(prefix="swift-sh-consumer-") as directory:
+    consumer = Path(directory)
+    package = root
+    if args.repository:
+        package = consumer / "swift-sh"
+        subprocess.run(["git", "clone", "--quiet", args.repository, str(package)], check=True)
+        ref = args.revision or "v" + args.version
+        subprocess.run(["git", "-C", str(package), "checkout", "--quiet", "--detach", ref], check=True)
+        subprocess.run(["swift", "build", "--package-path", str(package), "-c", "release", "--force-resolved-versions"], check=True)
+    binary_directory = subprocess.check_output(["swift", "build", "--package-path", str(package), "-c", "release", "--show-bin-path"], text=True).strip()
+    binary = Path(binary_directory) / "swift-sh"
+    expected = subprocess.check_output([str(package / "Scripts/validate-version")], text=True).strip()
+    for arguments, status in [(["--version"], 0), (["--help"], 0), (["package", "--unknown"], 3), (["--version", "extra"], 3)]:
+        result = subprocess.run([str(binary), *arguments], input="", text=True, capture_output=True, timeout=20)
+        if result.returncode != status:
+            raise RuntimeError(f"Unexpected CLI status for {arguments}: {result.returncode}\n{result.stderr}")
+        if arguments == ["--version"] and (result.stdout.strip() != expected or result.stderr):
+            raise RuntimeError("CLI version differs from the source declaration")
+    script = consumer / "consumer.swift"
+    script.write_text('''#!/usr/bin/swift sh
+import SemVer // swift-library/swift-semver == 0.1.0
+@main struct Consumer {
+  static func main() throws {
+    let version = try Version(parsing: "1.2.3-alpha.1")
+    print(try version.incrementingPrerelease())
+  }
+}
+''')
+    environment = dict(os.environ, XDG_CACHE_HOME=str(consumer / "cache"))
+    result = subprocess.run([str(binary), str(script)], env=environment, text=True, capture_output=True, timeout=180)
+    if result.returncode != 0 or result.stdout != "1.2.3-alpha.2\n":
+        raise RuntimeError("Independent script failed: " + result.stderr)
+    evidence = root / ".build/release-validation"
+    evidence.mkdir(parents=True, exist_ok=True)
+    for lock in (consumer / "cache").rglob("Package.resolved"):
+        (evidence / "consumer-Package.resolved").write_bytes(lock.read_bytes())
+    if args.repository:
+        receipt = {
+            "repository": args.repository,
+            "commit": subprocess.check_output(["git", "-C", str(package), "rev-parse", "HEAD"], text=True).strip(),
+            "version": expected,
+        }
+        (evidence / "remote-consumer.json").write_text(json.dumps(receipt, indent=2) + "\n")
+    print("swift-sh consumer passed")

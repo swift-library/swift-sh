@@ -1,0 +1,11 @@
+name: CI
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    uses: swift-library/.github/.github/workflows/swift-package-ci.yml@78c08d135bdde1bbf09366186300007a354f69ee

@@ -1,0 +1,30 @@
+#!/usr/bin/swift sh
+import Foundation
+
+extension Int {
+  var fg: UInt8 {
+    if !(16..<250 ~= self) || 24...36 ~= (self - 16) % 36 {
+      return 16
+    } else {
+      return 255
+    }
+  }
+  var bg: UInt8 {
+    return UInt8(self)
+  }
+  var paddedString: String {
+    return " \(self)".padding(toLength: 5, withPad: " ", startingAt: 0)
+  }
+  var terminator: String {
+    return (self + 3).isMultiple(of: 6) ? "\n" : ""
+  }
+  var stylePrefix: String {
+    return "\u{001B}[38;5;\(fg);48;5;\(bg)m"
+  }
+}
+
+for x in 0...255 {
+  print(
+    "\(x.stylePrefix)\(x.paddedString)\u{001B}[0m",
+    terminator: x.terminator)
+}
