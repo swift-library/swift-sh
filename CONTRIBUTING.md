@@ -4,19 +4,20 @@ Keep changes small, role-aware, and verified with SwiftPM.
 
 ## Build And Test
 
-Use SwiftPM from the repository root:
+Run the repository checks from the root:
 
 ```sh
-swift --version
-swift package resolve
-swift-format lint --strict --configuration .swift-format \
-  Package.swift \
-  $(find Sources Tests Examples -type f \( -name '*.swift' -o ! -name '*.*' \) -print)
-swift build
-swift test
+Scripts/check
 ```
 
-The package currently targets Swift 6.3 or newer and macOS 14 or newer.
+This validates strict formatting, release metadata, Swift tests, a Release
+build, and an independent script consumer. CI validates the minimum supported
+Swift toolchain with its matching SDK. The package requires Swift 6.3, macOS 15
+or Linux; macOS source builds require the SDK from Xcode 26 or newer.
+
+For a custom SwiftPM scratch directory, set `SWIFT_SH_TEST_BINARY` to its built
+swift-sh executable before running the integration tests. Tests use isolated
+script packages and caches and do not require remote fixture dependencies.
 
 ## Documentation Placement
 
@@ -36,3 +37,10 @@ The package currently targets Swift 6.3 or newer and macOS 14 or newer.
 - Link to deeper reference or architecture material instead of duplicating it.
 - Keep `Package.swift`, `Package.resolved`, and CI in agreement when changing
   dependencies or toolchain support.
+
+## Releases and Security
+
+The [version policy](Documentation/Architecture/VersioningAndRelease.md) owns
+release and maintenance rules. Keep the runtime version, Changelog, dependency
+lock, and release configuration aligned. Use the private reporting route in
+[SECURITY.md](SECURITY.md) for vulnerabilities.

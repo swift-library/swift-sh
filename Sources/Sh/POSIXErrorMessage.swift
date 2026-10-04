@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Unlicense
+
 #if os(Linux)
   import func Glibc.strerror_r
   import var Glibc.EINVAL
@@ -8,7 +10,7 @@
   import var Darwin.ERANGE
 #endif
 
-public func strerror(_ code: Int32) -> String {
+func strerror(_ code: Int32) -> String {
   var cap = 64
   while cap <= 16 * 1024 {
     var buf = [Int8](repeating: 0, count: cap)

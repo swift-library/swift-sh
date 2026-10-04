@@ -1,0 +1,29 @@
+swift-sh
+
+This project derives from mxcl/swift-sh, originally authored by Max Howell and
+its contributors under the Unlicense. The original import revision is not
+recorded in this repository. Initial source provenance was reviewed against
+upstream commit 1e8423f0aac152bebcaf3af446ab590b237fe9f4. That comparison commit
+is not claimed as the original import revision. LICENSE.md retains the full
+upstream license. Historical provenance remains independent of current code
+structure and dependency choices.
+
+The swift-library project is maintained by Xudong Xu and the project authors.
+Its Swift sources are distributed under the Unlicense.
+
+Scripts/validate-version and Tests/ReleaseTools/test_version.py are adapted
+from swift-library/swift-semver release validation, copyright (c) 2026 Xudong Xu,
+under Apache-2.0 WITH Swift-exception. ThirdPartyLicenses/Apache-2.0.txt contains
+the complete license and exception.
+
+Distribution includes code built from these separately owned dependencies:
+- Swift Argument Parser: Apple Inc. and project authors, Apache-2.0.
+- SwiftSyntax and SwiftParser: Swift project authors, Apache-2.0 WITH Swift-exception.
+- Swift Subprocess: Apple Inc. and Swift project authors, Apache-2.0 WITH Swift-exception.
+- Swift System: Apple Inc. and Swift System project authors, Apache-2.0 WITH Swift-exception.
+- SemVer: Xudong Xu, swift-library and SwiftPM project authors, Apache-2.0 WITH Swift-exception.
+- Swift Crypto on Linux: Apple Inc. and project authors, Apache-2.0; its bundled
+  crypto components retain their own notices in the dependency source.
+
+Package.resolved identifies the dependency revisions. The original dependency
+repositories retain their copyright and license notices.

@@ -1,140 +1,72 @@
+// SPDX-License-Identifier: Unlicense
+
 import Foundation
-import Path
-import StreamReader
-import Version
+import SystemPackage
 
-public func package(_ script: Path, force: Bool, move: Bool) throws {
-  guard script.isFile else {
-    throw CocoaError.error(.fileNoSuchFile)
+func package(_ path: FilePath, force: Bool, move: Bool) async throws {
+  let source = try ScriptSource(reading: .file(path))
+  let shebang = source.text.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
+    .first.map(String.init)?.trimmingCharacters(in: .whitespacesAndNewlines)
+  guard
+    force
+      || [
+        "#!/usr/bin/swift sh", "#!/usr/bin/env swift sh", "#!/usr/bin/swift-sh", "#!/sbin/swift sh",
+        "#!/bin/swift sh",
+      ].contains(shebang ?? "")
+  else { throw PackageError.notScript }
+  let analysis = try ScriptAnalysis(source: source)
+  let name = source.name.capitalized
+  let destination = path.removingLastComponent().appending(name)
+  let temporary = try TemporaryDirectory(parent: path.removingLastComponent())
+  let toolchain = try await SwiftToolchain.discover(cache: BuildCache())
+  try await toolchain.run(
+    ["package", "init", "--type", "executable", "--name", name, "--disable-swift-testing"],
+    in: temporary.path)
+  let sources = temporary.path.appending("Sources").appending(name)
+  for file in try FileManager.default.contentsOfDirectory(
+    at: fileURL(sources), includingPropertiesForKeys: nil) where file.pathExtension == "swift"
+  {
+    try FileManager.default.removeItem(at: file)
   }
-
-  let reader = try StreamReader(path: script).makeIterator()
-  guard force || reader.next().isShebang else { throw PackageError.notScript }
-
-  let input: Script.Input = .path(script)
-  let deps = try reader.compactMap { try ImportSpecification(line: $0, from: input) }
-  let name = script.basename(dropExtension: true).capitalized
-  let destination = script.parent / name
-
-  try Path.mktemp { tmpdir in
-    try runSwiftPackage(
-      ["init", "--type", "executable", "--name", name, "--disable-swift-testing"], in: tmpdir)
-
-    let generatedSource = try singleGeneratedSwiftSource(in: tmpdir / "Sources" / name)
-    try generatedSource.delete()
-    try script.copy(to: generatedSource)
-
-    for dep in deps {
-      try addDependency(dep, target: name, in: tmpdir)
-    }
-
-    if move {
-      let backup = script.parent / "\(name).backup"
-      do {
-        try script.move(to: backup)
-        let result = try tmpdir.move(to: destination)
-        print("created: \(result)")
-        try backup.delete()
-      } catch {
-        if backup.exists {
-          _ = try? backup.move(to: script)
-        }
-        throw error
+  try source.compilableText.write(
+    to: fileURL(sources.appending(analysis.hasMainAttribute ? name + ".swift" : "main.swift")),
+    atomically: true, encoding: .utf8)
+  var seen: Set<String> = []
+  for dependency in analysis.dependencies {
+    if seen.insert(dependency.packageLine).inserted {
+      let arguments: [String]
+      switch dependency.dependencyName {
+      case .local: arguments = ["--type", "path"]
+      case .remote: arguments = dependency.constraint.packageArguments
       }
-    } else {
-      let result = try tmpdir.move(to: destination)
-      print("created: \(result)")
+      try await toolchain.run(
+        ["package", "add-dependency", dependency.dependencyName.location] + arguments,
+        in: temporary.path)
     }
+    try await toolchain.run(
+      [
+        "package", "add-target-dependency", dependency.importName, name, "--package",
+        dependency.dependencyName.identity,
+      ], in: temporary.path)
   }
+  if move {
+    let backup = temporary.path.appending("original-script")
+    try FileManager.default.moveItem(at: fileURL(path), to: fileURL(backup))
+    do {
+      try FileManager.default.moveItem(at: fileURL(temporary.path), to: fileURL(destination))
+    } catch {
+      try FileManager.default.moveItem(at: fileURL(backup), to: fileURL(path))
+      throw error
+    }
+    try FileManager.default.removeItem(at: fileURL(destination.appending("original-script")))
+  } else {
+    try FileManager.default.moveItem(at: fileURL(temporary.path), to: fileURL(destination))
+  }
+  print("created: \(destination)")
 }
 
 enum PackageError: LocalizedError {
   case notScript
 
-  var errorDescription: String? {
-    switch self {
-    case .notScript:
-      return "cannot package; not Swift script (override with --force)"
-    }
-  }
-}
-
-private func addDependency(_ dep: ImportSpecification, target: String, in packageRoot: Path) throws
-{
-  var dependencyArguments = ["add-dependency", dep.dependencyName.urlString]
-  dependencyArguments.append(
-    contentsOf: dep.dependencyName.packageDependencyArguments(for: dep.constraint))
-  try runSwiftPackage(dependencyArguments, in: packageRoot)
-
-  try runSwiftPackage(
-    [
-      "add-target-dependency",
-      dep.importName,
-      target,
-      "--package",
-      dep.dependencyName.packageName ?? dep.importName,
-    ], in: packageRoot)
-}
-
-private func runSwiftPackage(_ arguments: [String], in cwd: Path) throws {
-  let task = Process()
-  task.launchPath = Path.swift.string
-  task.currentDirectoryPath = cwd.string
-  task.arguments = ["package"] + arguments
-  _ = try task.runSync(tee: true)
-}
-
-private func singleGeneratedSwiftSource(in sourcesDirectory: Path) throws -> Path {
-  let files = sourcesDirectory.ls().filter { $0.extension == "swift" }
-  guard let file = files.first, files.count == 1 else {
-    throw CocoaError.error(.fileReadUnknown)
-  }
-  return file
-}
-
-extension ImportSpecification.DependencyName {
-  fileprivate func packageDependencyArguments(for constraint: ImportSpecification.Constraint)
-    -> [String]
-  {
-    switch self {
-    case .local:
-      return ["--type", "path"]
-    case .github, .scp, .url:
-      return constraint.swiftPackageAddDependencyArguments
-    }
-  }
-}
-
-extension ImportSpecification.Constraint {
-  fileprivate var swiftPackageAddDependencyArguments: [String] {
-    switch self {
-    case .upToNextMajor(from: let version):
-      return ["--from", version.description]
-    case .exact(let version):
-      return ["--exact", version.description]
-    case .ref(let ref):
-      return ["--revision", ref]
-    case .latest:
-      return ["--from", "0.0.0", "--to", "1000000.0.0"]
-    }
-  }
-}
-
-extension Optional where Wrapped == String {
-  fileprivate var isShebang: Bool {
-    switch self {
-    case "#!/usr/bin/swift sh"?:
-      return true
-    case "#!/usr/bin/env swift sh"?:
-      return true
-    case "#!/usr/bin/swift-sh"?:
-      return true
-    case "#!/sbin/swift sh"?:  // unlikely but possible
-      return true
-    case "#!/bin/swift sh"?:  // unlikely but possible
-      return true
-    default:
-      return false
-    }
-  }
+  var errorDescription: String? { "cannot package; not Swift script (override with --force)" }
 }

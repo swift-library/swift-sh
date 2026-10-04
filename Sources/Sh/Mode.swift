@@ -1,16 +1,18 @@
+// SPDX-License-Identifier: Unlicense
+
 import ArgumentParser
 import Foundation
-import Path
+import SystemPackage
 
 extension CommandLine {
-  public static var usage: String {
+  static var usage: String {
     SwiftShCommand.helpMessage()
   }
 
-  public enum Error: LocalizedError {
+  enum Error: LocalizedError {
     case invalidUsage(String)
 
-    public var errorDescription: String? {
+    var errorDescription: String? {
       switch self {
       case .invalidUsage(let message):
         return message
@@ -31,6 +33,7 @@ private struct SwiftShCommand: ParsableCommand {
       swift sh open <script> [--xcode]
       swift sh cache clean [<script>]
       """,
+    version: releaseVersion,
     subcommands: [
       PackageCommand.self,
       OpenCommand.self,
@@ -83,19 +86,20 @@ private struct CacheCleanCommand: ParsableCommand {
 
 //MARK: Mode
 
-public enum Mode {
+enum Mode {
   case run(RunType, args: ArraySlice<String>)
-  case package(Path, force: Bool, move: Bool)
-  case open(Path, xcode: Bool)
-  case clean(Path?)
+  case package(FilePath, force: Bool, move: Bool)
+  case open(FilePath, xcode: Bool)
+  case clean(FilePath?)
   case help(String)
+  case version
 
-  public enum RunType {
+  enum RunType {
     case stdin
-    case file(Path)
+    case file(FilePath)
   }
 
-  public init(for args: [String], isTTY: Bool) throws {
+  init(for args: [String], isTTY: Bool) throws {
     let arguments = Array(args.dropFirst())
     guard let command = arguments.first else {
       if isTTY {
@@ -113,7 +117,7 @@ public enum Mode {
         self = .help(PackageCommand.helpMessage())
       } else {
         let command = try Self.parse(PackageCommand.self, arguments: rest)
-        self = .package(command.script.asPath, force: command.force, move: command.move)
+        self = .package(command.script.asFilePath, force: command.force, move: command.move)
       }
     case "open":
       let rest = Array(arguments.dropFirst())
@@ -121,7 +125,7 @@ public enum Mode {
         self = .help(OpenCommand.helpMessage())
       } else {
         let command = try Self.parse(OpenCommand.self, arguments: rest)
-        self = .open(command.script.asPath, xcode: command.xcode)
+        self = .open(command.script.asFilePath, xcode: command.xcode)
       }
     case "cache":
       self = try Self.parseCache(Array(arguments.dropFirst()))
@@ -129,11 +133,16 @@ public enum Mode {
       self = try Self.parseHelp(Array(arguments.dropFirst()))
     case "-", "--":
       self = .run(.stdin, args: ArraySlice(arguments.dropFirst()))
+    case "--version":
+      guard arguments.count == 1 else {
+        throw CommandLine.Error.invalidUsage("--version accepts no arguments.")
+      }
+      self = .version
     case "--help", "-h":
       self = .help(CommandLine.usage)
     default:
-      let path = command.asPath
-      if isTTY || path.isFile {
+      let path = command.asFilePath
+      if isTTY || FileManager.default.fileExists(atPath: path.string) {
         self = .run(.file(path), args: ArraySlice(arguments.dropFirst()))
       } else {
         self = .run(.stdin, args: ArraySlice(arguments))
@@ -170,7 +179,7 @@ public enum Mode {
       return .help(CacheCleanCommand.helpMessage())
     }
     let command = try parse(CacheCleanCommand.self, arguments: rest)
-    return .clean(command.script.map { $0.asPath })
+    return .clean(command.script.map { $0.asFilePath })
   }
 
   private static func parseHelp(_ arguments: [String]) throws -> Mode {
@@ -198,7 +207,7 @@ public enum Mode {
 }
 
 extension String {
-  fileprivate var asPath: Path {
-    return Path(self) ?? Path.cwd / self
+  fileprivate var asFilePath: FilePath {
+    absolutePath(self)
   }
 }

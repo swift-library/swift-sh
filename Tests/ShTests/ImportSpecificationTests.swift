@@ -1,272 +1,149 @@
+// SPDX-License-Identifier: Unlicense
+
 import Foundation
-import Path
+import SemVer
+import SystemPackage
 import Testing
-import Version
 
 @testable import Sh
 
-@Suite
-struct ImportSpecificationTests {
-  @Test func testWigglyArrow() throws {
-    let a = try parse("import Foo // @example ~> 1.0", from: .path(Path.cwd.join("script.swift")))
-    expectEqual(a?.dependencyName, .github(user: "example", repo: "Foo"))
-    expectEqual(a?.constraint, .upToNextMajor(from: .one))
-    expectEqual(a?.importName, "Foo")
+struct ScriptAnalysisTests {
+  @Test(arguments: [
+    "import Fixture // @example ~> 1.2",
+    "@testable import Fixture // @example ~> 1.2",
+    "import\n Fixture // @example~>v1.2",
+    "import struct Fixture.Value // @example ~> 1.2.0",
+    "import func Fixture.value // @example ~> 1.2",
+    "import Fixture; // @example ~> 1.2",
+  ])
+  func syntaxNodesIdentifyModules(_ text: String) throws {
+    let analysis = try ScriptAnalysis(source: source(text))
+    let dependency = try #require(analysis.dependencies.first)
+    #expect(analysis.dependencies.count == 1)
+    #expect(dependency.importName == "Fixture")
+    #expect(dependency.dependencyName == .remote("https://github.com/example/Fixture.git"))
+    #expect(dependency.constraint == .upToNextMajor(Version(1, 2, 0)))
   }
 
-  @Test func testTrailingWhitespace() throws {
-    let a = try parse("import Foo // @example ~> 1.0 ", from: .path(Path.cwd.join("script.swift")))
-    expectEqual(a?.dependencyName, .github(user: "example", repo: "Foo"))
-    expectEqual(a?.constraint, .upToNextMajor(from: .one))
-    expectEqual(a?.importName, "Foo")
+  @Test func commentsAndStringsAreNotDeclarations() throws {
+    let analysis = try ScriptAnalysis(
+      source: source(
+        #"""
+        /* import Fake // @example
+           /* @main */
+        */
+        // import Fake // @example
+        let text = "import Fake // @example @main"
+        let multiline = """
+        @main
+        import Fake // @example
+        """
+        let raw = #"import Fake // @example @main"#
+        import Foundation // Standard library
+        """#))
+    #expect(analysis.dependencies.isEmpty)
+    #expect(!analysis.hasMainAttribute)
   }
 
-  @Test func testExact() throws {
-    let a = try parse("import Foo // @example == 1.0", from: .path(Path.cwd.join("script.swift")))
-    expectEqual(a?.dependencyName, .github(user: "example", repo: "Foo"))
-    expectEqual(a?.constraint, .exact(.one))
-    expectEqual(a?.importName, "Foo")
+  @Test func declarationAttributesAndConditionalBoundary() throws {
+    let analysis = try ScriptAnalysis(
+      source: source(
+        """
+        #if os(macOS)
+        import Foo // example/swift-foo == 1.2.3-alpha.1+build
+        #else
+        import Bar // example/swift-bar == main
+        #endif
+        @main /* entry point */
+        struct Program { static func main() {} }
+        """))
+    #expect(analysis.hasMainAttribute)
+    #expect(analysis.dependencies.map(\.importName) == ["Foo", "Bar"])
+    #expect(
+      analysis.dependencies[0].constraint == .exact(try Version(parsing: "1.2.3-alpha.1+build")))
+    #expect(analysis.dependencies[1].constraint == .revision("main"))
   }
 
-  @Test func testMoreSpaces() throws {
-    let b = try parse(
-      "import    Foo       //     @example    ~>      1.0",
-      from: .path(Path.cwd.join("script.swift")))
-    expectEqual(b?.dependencyName, .github(user: "example", repo: "Foo"))
-    expectEqual(b?.constraint, .upToNextMajor(from: .one))
-    expectEqual(b?.importName, "Foo")
+  @Test(arguments: [
+    ("example/swift-fixture", "https://github.com/example/swift-fixture.git"),
+    ("@some.owner", "https://github.com/some-owner/Fixture.git"),
+    ("https://example.com/fixture.git", "https://example.com/fixture.git"),
+    ("ssh://git@example.com/fixture.git", "ssh://git@example.com/fixture.git"),
+    ("git@example.com:fixture.git", "git@example.com:fixture.git"),
+  ])
+  func repositoryForms(_ comment: String, location: String) throws {
+    let dependency = try #require(
+      try ImportSpecification(module: "Fixture", comment: comment, source: source("")))
+    #expect(dependency.dependencyName.location == location)
+    #expect(dependency.constraint == .latest)
   }
 
-  @Test func testMinimalSpaces() throws {
-    let b = try parse("import Foo//@example~>1.0", from: .path(Path.cwd.join("script.swift")))
-    expectEqual(b?.dependencyName, .github(user: "example", repo: "Foo"))
-    expectEqual(b?.constraint, .upToNextMajor(from: .one))
-    expectEqual(b?.importName, "Foo")
-  }
-
-  @Test func testCanOverrideImportName() throws {
-    let b = try parse(
-      "import Foo  // example/Bar ~> 1.0", from: .path(Path.cwd.join("script.swift")))
-    expectEqual(b?.dependencyName, .github(user: "example", repo: "Bar"))
-    expectEqual(b?.constraint, .upToNextMajor(from: .one))
-    expectEqual(b?.importName, "Foo")
-  }
-
-  @Test func testCanOverrideImportNameUsingNameWithHyphen() throws {
-    let b = try parse(
-      "import Bar  // example/swift-bar ~> 1.0", from: .path(Path.cwd.join("script.swift")))
-    expectEqual(b?.dependencyName, .github(user: "example", repo: "swift-bar"))
-    expectEqual(b?.constraint, .upToNextMajor(from: .one))
-    expectEqual(b?.importName, "Bar")
-  }
-
-  @Test func testCanProvideLocalPath() throws {
-    let homePath = Path.home
-    let b = try parse(
-      "import Bar  // \(homePath.string)", from: .path(homePath.join("script.swift")))
-    expectEqual(b?.dependencyName, .local(Path(homePath)))
-    expectEqual(b?.importName, "Bar")
-    expectEqual(b?.packageLine, ".package(path: \"\(homePath.string)\")")
-  }
-
-  @Test func testCanProvideLocalPathWithTilde() throws {
-    let homePath = Path.home
-    let b = try parse("import Bar  // ~/", from: .path(homePath.join("script.swift")))
-    expectEqual(b?.dependencyName, .local(Path(homePath)))
-    expectEqual(b?.importName, "Bar")
-    expectEqual(b?.packageLine, ".package(path: \"\(homePath.string)\")")
-  }
-
-  @Test func testCanProvideLocalRelativeCurrentPath() throws {
-    let cwd = Path.cwd
-    let b = try parse("import Bar  // ./", from: .path(cwd.join("script.swift")))
-    expectEqual(b?.dependencyName, .local(Path(cwd)))
-    expectEqual(b?.importName, "Bar")
-    expectEqual(b?.packageLine, ".package(path: \"\(cwd.string)\")")
-  }
-
-  @Test func testCanProvideLocalRelativeNonCurrentPath() throws {
-    let homePath = Path.home
-    // Provide a script path that's inside the home directory (not cwd)
-    let b = try parse("import Bar  // ./", from: .path(homePath.join("script.swift")))
-    expectEqual(b?.dependencyName, .local(Path(homePath)))
-    expectEqual(b?.importName, "Bar")
-    expectEqual(b?.packageLine, ".package(path: \"\(homePath.string)\")")
-  }
-
-  @Test func testCanProvideLocalRelativeParentPath() throws {
-    let cwdParent = Path.cwd / "../"
-    let b = try parse("import Bar  // ../", from: .path(Path.cwd.join("script.swift")))
-    expectEqual(b?.dependencyName, .local(cwdParent))
-    expectEqual(b?.importName, "Bar")
-    expectEqual(b?.packageLine, ".package(path: \"\(cwdParent.string)\")")
-  }
-
-  @Test func testCanProvideLocalRelativeTwoParentsUpPath() throws {
-    let cwdParent = Path.cwd / "../../"
-    let b = try parse("import Bar  // ../../", from: .path(Path.cwd.join("script.swift")))
-    expectEqual(b?.dependencyName, .local(cwdParent))
-    expectEqual(b?.importName, "Bar")
-    expectEqual(b?.packageLine, ".package(path: \"\(cwdParent.string)\")")
-  }
-
-  @Test func testCanProvideLocalPathWithHypen() throws {
-    let tmpPath = Path.root.tmp.fake / "with-hyphen-two" / "lastone"
-    try tmpPath.mkdir(.p)
-    let b = try parse(
-      "import Foo  // /tmp/fake/with-hyphen-two/lastone",
-      from: .path(tmpPath.join("script.swift")))
-    expectEqual(b?.dependencyName, .local(tmpPath))
-    expectEqual(b?.importName, "Foo")
-    expectEqual(b?.packageLine, ".package(path: \"\(tmpPath.string)\")")
-  }
-
-  @Test func testCanProvideLocalPathWithHyphenAndDotsAndSpacesOhMy() throws {
-    let tmpPath = Path.root.tmp.fake / "with-hyphen.two.one-zero" / "last one"
-    try tmpPath.mkdir(.p)
-    let b = try parse(
-      "import Foo  // /tmp/fake/with-hyphen.two.one-zero/last one",
-      from: .path(tmpPath.join("script.swift")))
-    expectEqual(b?.dependencyName, .local(tmpPath))
-    expectEqual(b?.importName, "Foo")
-    expectEqual(b?.packageLine, ".package(path: \"\(tmpPath.string)\")")
-  }
-
-  @Test func testCanProvideLocalPathWithSpaces() throws {
-    let tmpPath = Path.root.tmp.fake / "with space" / "last"
-    try tmpPath.mkdir(.p)
-    let b = try parse(
-      "import Bar  // /tmp/fake/with space/last", from: .path(tmpPath.join("script.swift")))
-    expectEqual(b?.dependencyName, .local(tmpPath))
-    expectEqual(b?.importName, "Bar")
-    expectEqual(b?.packageLine, ".package(path: \"\(tmpPath.string)\")")
-  }
-
-  @Test func testCanProvideLocalPathWithSpacesInLast() throws {
-    let tmpPath = Path.root.tmp.fake / "with space" / "last one"
-    try tmpPath.mkdir(.p)
-    let b = try parse(
-      "import Foo  // /tmp/fake/with space/last one",
-      from: .path(tmpPath.join("script.swift")))
-    expectEqual(b?.dependencyName, .local(tmpPath))
-    expectEqual(b?.importName, "Foo")
-    expectEqual(b?.packageLine, ".package(path: \"\(tmpPath.string)\")")
-  }
-
-  @Test func testCanProvideLocalPathWithSpacesAndRelativeParentsUp() throws {
-    let tmpPath = Path.root.tmp.fake.fakechild / ".." / "with space" / "last"
-    try tmpPath.mkdir(.p)
-    let b = try parse(
-      "import Bar  // /tmp/fake/with space/last", from: .path(tmpPath.join("script.swift")))
-    expectEqual(b?.dependencyName, .local(tmpPath))
-    expectEqual(b?.importName, "Bar")
-    expectEqual(b?.packageLine, ".package(path: \"\(tmpPath.string)\")")
-  }
-
-  @Test func testCanProvideLocalPathWithSpacesAndRelativeParentsUpTwo() throws {
-    let tmpPath = Path.root.tmp.fake.fakechild1.fakechild2 / "../.." / "with space" / "last"
-    try tmpPath.mkdir(.p)
-    let b = try parse(
-      "import Bar  // /tmp/fake/with space/last", from: .path(tmpPath.join("script.swift")))
-    expectEqual(b?.dependencyName, .local(tmpPath))
-    expectEqual(b?.importName, "Bar")
-    expectEqual(b?.packageLine, ".package(path: \"\(tmpPath.string)\")")
-  }
-
-  @Test func testCanProvideFullURL() throws {
-    let b = try parse(
-      "import Foo  // https://example.com/example/Bar.git ~> 1.0",
-      from: .path(Path.cwd.join("script.swift")))
-    expectEqual(b?.dependencyName, .url(URL(string: "https://example.com/example/Bar.git")!))
-    expectEqual(b?.constraint, .upToNextMajor(from: .one))
-    expectEqual(b?.importName, "Foo")
-  }
-
-  @Test func testCanProvideFullURLWithHyphen() throws {
-    let b = try parse(
-      "import Bar  // https://example.com/example/swift-bar.git ~> 1.0",
-      from: .path(Path.cwd.join("script.swift")))
-    expectEqual(b?.dependencyName, .url(URL(string: "https://example.com/example/swift-bar.git")!))
-    expectEqual(b?.constraint, .upToNextMajor(from: .one))
-    expectEqual(b?.importName, "Bar")
-  }
-
-  @Test func testCanProvideFullSSHURLWithHyphen() throws {
-    let url = "ssh://git@github.com/MariusCiocanel/swift-sh.git"
-    let b = try parse(
-      "import Bar  // \(url) ~> 1.0", from: .path(Path.cwd.join("script.swift")))
-    expectEqual(b?.dependencyName, .url(URL(string: url)!))
-    expectEqual(b?.constraint, .upToNextMajor(from: .one))
-    expectEqual(b?.importName, "Bar")
-    expectEqual(b?.dependencyName.urlString, url)
-  }
-
-  @Test func testCanProvideCommonSSHURLStyle() throws {
-    let uri = "git@github.com:MariusCiocanel/Path.swift.git"
-    let b = try parse(
-      "import Path  // \(uri) ~> 1.0", from: .path(Path.cwd.join("script.swift")))
-    expectEqual(b?.dependencyName, .scp(uri))
-    expectEqual(b?.constraint, .upToNextMajor(from: .one))
-    expectEqual(b?.importName, "Path")
-    expectEqual(b?.dependencyName.urlString, "git@github.com:MariusCiocanel/Path.swift.git")
-  }
-
-  @Test func testCanProvideCommonSSHURLStyleWithHyphen() throws {
-    let uri = "git@github.com:MariusCiocanel/swift-sh.git"
-    let b = try parse(
-      "import Bar  // \(uri) ~> 1.0", from: .path(Path.cwd.join("script.swift")))
-    expectEqual(b?.dependencyName, .scp(uri))
-    expectEqual(b?.constraint, .upToNextMajor(from: .one))
-    expectEqual(b?.importName, "Bar")
-    expectEqual(b?.dependencyName.urlString, "git@github.com:MariusCiocanel/swift-sh.git")
-  }
-
-  @Test func testCanDoSpecifiedImports() throws {
-    let kinds = [
-      "struct",
-      "class",
-      "enum",
-      "protocol",
-      "typealias",
-      "func",
-      "let",
-      "var",
-    ]
-    for kind in kinds {
-      let b = try parse(
-        "import \(kind) Foo.bar  // https://example.com/example/Bar.git ~> 1.0",
-        from: .path(Path.cwd.join("script.swift")))
-      expectEqual(b?.dependencyName, .url(URL(string: "https://example.com/example/Bar.git")!))
-      expectEqual(b?.constraint, .upToNextMajor(from: .one))
-      expectEqual(b?.importName, "Foo")
+  @Test(arguments: [
+    "", "@", "@bad!", "owner/repo ==", "owner/repo ~>", "owner/repo >= 1.0",
+    "owner/repo == 1.0 extra",
+  ])
+  func malformedDeclarations(_ comment: String) throws {
+    if comment.isEmpty {
+      #expect(
+        try ImportSpecification(module: "Fixture", comment: comment, source: source("")) == nil)
+    } else {
+      #expect(throws: SourceError.self) {
+        try ImportSpecification(module: "Fixture", comment: comment, source: source(""))
+      }
     }
   }
 
-  @Test func testCanUseTestable() throws {
-    let b = try parse(
-      "@testable import Foo  // @bar ~> 1.0", from: .path(Path.cwd.join("script.swift")))
-    expectEqual(b?.dependencyName, .github(user: "bar", repo: "Foo"))
-    expectEqual(b?.constraint, .upToNextMajor(from: .one))
-    expectEqual(b?.importName, "Foo")
+  @Test(arguments: [
+    ("1", "1.0.0"), ("v1.2", "1.2.0"), ("0.2.3-alpha.1+build", "0.2.3-alpha.1+build"),
+  ])
+  func scriptVersionConveniences(_ operand: String, version: String) {
+    #expect(ImportSpecification.scriptVersion(operand)?.description == version)
+    #expect(Version("v1.2") == nil)
   }
 
-  @Test func testLatestVersion() throws {
-    let b = try parse("import Foo  // @bar", from: .path(Path.cwd.join("script.swift")))
-    expectEqual(b?.dependencyName, .github(user: "bar", repo: "Foo"))
-    expectEqual(b?.constraint, .latest)
-    expectEqual(b?.importName, "Foo")
+  @Test(arguments: ["main", "abcdef", "01.2.3", "1.2.3-alpha.01"])
+  func nonVersionsAreGitReferences(_ operand: String) throws {
+    let dependency = try #require(
+      try ImportSpecification(
+        module: "Fixture", comment: "@example == " + operand, source: source("")))
+    #expect(dependency.constraint == .revision(operand))
   }
 
-  @Test func testSwiftVersion() {
-    let components = swiftVersion.split(separator: ".")
-    expectEqual(components.count, 2)
-    expectNotNil(Int(components[0]))
-    expectNotNil(Int(components[1]))
+  @Test func localPathsAndLiteralEscaping() throws {
+    let temporary = try TemporaryDirectory()
+    let dependency = temporary.path.appending("local \"quoted\"")
+    try FileManager.default.createDirectory(
+      at: fileURL(dependency), withIntermediateDirectories: true)
+    let input = ScriptSource(
+      path: temporary.path.appending("script.swift"), name: "script", text: "",
+      dependencyDirectory: temporary.path)
+    let parsed = try #require(
+      try ImportSpecification(module: "Fixture", comment: "./local \"quoted\"", source: input))
+    #expect(parsed.dependencyName == .local(dependency))
+    #expect(parsed.packageLine.contains("\\\"quoted\\\""))
+    #expect(swiftLiteral("\\(value)\n\"quoted\"") == "\"\\\\(value)\\n\\\"quoted\\\"\"")
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    #expect(
+      try ImportSpecification(module: "Fixture", comment: "~/", source: input)?.dependencyName
+        == .local(FilePath(home)))
+  }
+
+  @Test func shebangPreservesLinesAndLiteralContent() {
+    let input = source(
+      "#!/usr/bin/swift sh\r\n@main struct Program {\n  static func main() { print(\"#!inside\") }\n}\n"
+    )
+    #expect(
+      input.compilableText
+        == "// swift-sh script\n@main struct Program {\n  static func main() { print(\"#!inside\") }\n}\n"
+    )
+    #expect(
+      input.compilableText.utf8.filter { $0 == 10 }.count
+        == input.text.utf8.filter { $0 == 10 }.count)
   }
 }
 
-extension Version {
-  static var one: Version {
-    return Version(1, 0, 0)
-  }
+private func source(_ text: String) -> ScriptSource {
+  ScriptSource(
+    path: nil, name: "Script", text: text,
+    dependencyDirectory: absolutePath(FileManager.default.currentDirectoryPath))
 }

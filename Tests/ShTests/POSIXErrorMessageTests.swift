@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Unlicense
+
 import Foundation
 import Testing
 
@@ -7,9 +9,9 @@ import Testing
 struct POSIXErrorMessageTests {
   @Test func testStrerror() {
     #if os(macOS)
-      expectEqual(strerror(ERANGE), "Result too large (34)")
+      #expect(strerror(ERANGE) == "Result too large (34)")
     #else
-      expect(strerror(ERANGE).hasSuffix("(34)"))
+      #expect(strerror(ERANGE).hasSuffix("(34)"))
     #endif
   }
 }

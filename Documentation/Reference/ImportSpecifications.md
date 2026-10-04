@@ -1,7 +1,8 @@
 # Import Specifications
 
-`swift-sh` reads dependency specifications from comments after Swift import
-lines.
+`swift-sh` reads dependency specifications from trailing line comments on
+Swift import declarations. Imports may span lines or use attributes; comments
+and string literals are ignored by the syntax analyzer.
 
 ```swift
 import ModuleName  // dependency constraint
@@ -52,8 +53,9 @@ import Baz  // ~/my/other/other/project
 import Fuz  // /I/have/many/projects
 ```
 
-Relative local paths are resolved relative to the script path for file-backed
-scripts. A value like `foo/bar` is treated as a GitHub dependency; prefix local
+Relative local paths resolve beside the resolved source file for file-backed
+scripts, or against the current working directory for stdin and named pipes.
+Local paths can contain spaces and must identify an existing package directory. A value like `foo/bar` is treated as a GitHub dependency; prefix local
 relative paths with `./` or `../`.
 
 Local dependencies do not need version constraints.
@@ -65,6 +67,12 @@ Local dependencies do not need version constraints.
 ```swift
 import ArgumentParser  // apple/swift-argument-parser ~> 1.8
 ```
+
+Major-only and major/minor versions are padded with zero components. A leading
+`v` is accepted. `~> 0.2` means `0.2.0..<1.0.0`, matching SwiftPM next-major
+semantics. Strict SemVer validation applies after adaptation, including numeric
+leading-zero rules. A value that is not a semantic version is a Git revision;
+both operators retain that fallback.
 
 `==` with a semantic version maps to an exact version:
 
@@ -112,3 +120,12 @@ Specific import forms resolve the product from the imported module name:
 ```swift
 import struct Foo.Bar  // https://example.com/example/Bar.git ~> 1.0
 ```
+
+## Conditional Compilation
+
+Dependencies from all syntactic `#if` branches are collected. swift-sh does
+not evaluate custom compilation conditions or choose platform-specific package
+requirements. The script's compiler still controls which Swift code is active.
+
+Imports must name an exported library product. Product-to-module renaming is
+outside the dependency comment syntax.

@@ -4,37 +4,38 @@ import PackageDescription
 let package = Package(
   name: "swift-sh",
   platforms: [
-    .macOS(.v14)
+    .macOS(.v15)
   ],
   products: [
     .executable(name: "swift-sh", targets: ["Sh"])
   ],
   dependencies: [
-    .package(url: "https://github.com/apple/swift-argument-parser", from: "1.8.1"),
-    .package(url: "https://github.com/mxcl/Path.swift", from: "1.6.0"),
-    .package(url: "https://github.com/mxcl/StreamReader", from: "1.0.1"),
-    .package(url: "https://github.com/mxcl/LegibleError", from: "1.0.6"),
-    .package(url: "https://github.com/mxcl/Version", from: "2.2.1"),
-    .package(url: "https://github.com/krzyzanowskim/CryptoSwift", from: "1.10.0"),
+    .package(url: "https://github.com/apple/swift-argument-parser", "1.8.1"..<"1.9.0"),
+    .package(url: "https://github.com/swiftlang/swift-syntax", "603.0.0"..<"604.0.0"),
+    .package(url: "https://github.com/apple/swift-system", "1.8.1"..<"1.9.0"),
+    .package(url: "https://github.com/swiftlang/swift-subprocess", "1.0.0"..<"1.1.0"),
+    .package(url: "https://github.com/apple/swift-crypto", "5.0.0"..<"5.1.0"),
+    .package(url: "https://github.com/swift-library/swift-semver", .upToNextMinor(from: "0.1.0")),
   ],
   targets: [
     .executableTarget(
       name: "Sh",
       dependencies: [
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
-        "LegibleError",
-        "StreamReader",
-        "Version",
-        .product(name: "Path", package: "Path.swift"),
-        "CryptoSwift",
+        .product(name: "SwiftParser", package: "swift-syntax"),
+        .product(name: "SwiftSyntax", package: "swift-syntax"),
+        .product(name: "SystemPackage", package: "swift-system"),
+        .product(name: "Subprocess", package: "swift-subprocess"),
+        .product(name: "SemVer", package: "swift-semver"),
+        .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])),
       ]),
     .testTarget(
       name: "ShTests",
       dependencies: [
         "Sh",
-        "StreamReader",
-        "Version",
-        .product(name: "Path", package: "Path.swift"),
+        .product(name: "SemVer", package: "swift-semver"),
+        .product(name: "SystemPackage", package: "swift-system"),
+        .product(name: "Subprocess", package: "swift-subprocess"),
       ]),
   ]
 )

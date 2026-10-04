@@ -1,28 +1,39 @@
+// SPDX-License-Identifier: Unlicense
+
 import Foundation
-import Path
-import StreamReader
+import Subprocess
+import SystemPackage
 
-public func open(path: Path, xcode: Bool) throws -> Never {
-  let script = try scriptForOpening(path)
+func open(path: FilePath, xcode: Bool) async throws -> Never {
+  let analysis = try ScriptAnalysis(source: ScriptSource(reading: .file(path)))
+  let cache = BuildCache()
+  let lock = try CacheLock(root: cache.root, key: cache.key(for: analysis.source))
+  defer { lock.release() }
+  let script = Script(analysis: analysis, cache: cache)
   try script.write()
-
   if xcode {
     #if os(macOS)
-      let invocation = xcodeOpenInvocation(for: script.buildDirectory)
-      try exec(arg0: invocation.arg0, args: invocation.args)
+      try exec(arg0: "/usr/bin/open", args: ["-a", "Xcode", script.directory.string])
     #else
       throw OpenError.xcodeUnavailable
     #endif
-  } else {
-    guard let editor = ProcessInfo.processInfo.environment["EDITOR"] else {
-      throw OpenError.editorUndefined
-    }
-    guard let editorPath = Path(editor) ?? Path.which(editor) else {
-      throw OpenError.editorNotFound(editor)
-    }
-    chdir(script.buildDirectory.string)
-    try exec(arg0: editorPath.string, args: [script.mainSwift.string])
   }
+  guard let editor = ProcessInfo.processInfo.environment["EDITOR"], !editor.isEmpty else {
+    throw OpenError.editorUndefined
+  }
+  let executable: Executable =
+    editor.contains("/") ? .path(.init(absolutePath(editor).string)) : .name(editor)
+  let editorPath: FilePath
+  do {
+    let resolved = try await executable.resolveExecutablePath(in: .inherit)
+    editorPath = FilePath(resolved.string)
+  } catch {
+    throw OpenError.editorNotFound(editor)
+  }
+  guard FileManager.default.changeCurrentDirectoryPath(script.directory.string) else {
+    throw CocoaError(.fileReadUnknown)
+  }
+  try exec(arg0: editorPath.string, args: [script.entry.string])
 }
 
 enum OpenError: LocalizedError {
@@ -32,29 +43,9 @@ enum OpenError: LocalizedError {
 
   var errorDescription: String? {
     switch self {
-    case .editorUndefined:
-      return "EDITOR undefined"
-    case .editorNotFound(let editor):
-      return "EDITOR not in PATH: \(editor)"
-    case .xcodeUnavailable:
-      return "Xcode editing is only available on macOS"
+    case .editorNotFound(let editor): return "EDITOR not in PATH: \(editor)"
+    case .editorUndefined: return "EDITOR undefined"
+    case .xcodeUnavailable: return "Xcode editing is only available on macOS"
     }
   }
-}
-
-private func scriptForOpening(_ path: Path) throws -> Script {
-  let input: Script.Input = .path(path)
-  let reader = try StreamReader(path: path)
-  var style: ExecutableTargetMainStyle = .topLevelCode
-  let deps: [ImportSpecification] = try reader.compactMap { line in
-    if line.contains("@main") && !(line.contains("//") || line.contains("/*")) {
-      style = .mainAttribute
-    }
-    return try ImportSpecification(line: line, from: input)
-  }
-  return Script(for: .path(path), style: style, dependencies: deps)
-}
-
-func xcodeOpenInvocation(for packageDirectory: Path) -> (arg0: String, args: [String]) {
-  return ("/usr/bin/open", ["-a", "Xcode", packageDirectory.string])
 }

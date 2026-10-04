@@ -1,0 +1,16 @@
+{
+  "repository": "swift-library/swift-sh",
+  "version_file": "Sources/Sh/Version.swift",
+  "version_pattern": "(?m)^let releaseVersion = \"([^\"]+)\"$",
+  "changelog": "CHANGELOG.md",
+  "check_command": "Scripts/check",
+  "ci": {
+    "include": [
+      { "name": "macos-15-swift-6.3", "runner": "macos-15", "xcode": "26.0.1", "swift": "6.3.3", "command": "Scripts/check --compiler-check" },
+      { "name": "macos-26-swift-6.3", "runner": "macos-26", "xcode": "26.6", "command": "Scripts/check --compiler-check" },
+      { "name": "strict-format", "runner": "macos-26", "xcode": "26.6", "command": "Scripts/check --format-check" },
+      { "name": "linux-swift-6.3", "runner": "ubuntu-24.04", "command": "docker run --rm --user \"$(id -u):$(id -g)\" --env HOME=/tmp --volume \"$PWD:/swift-sh\" --workdir /swift-sh swift:6.3.3-jammy@sha256:2f3a1d7bb74da95c4857514589667a58087fdaf34f11e424d47854bebd710cf2 Scripts/check --compiler-check" }
+    ]
+  },
+  "platforms": { "macOS": [15, 26, 27] }
+}

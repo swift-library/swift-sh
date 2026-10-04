@@ -1,15 +1,11 @@
+// SPDX-License-Identifier: Unlicense
+
 import Foundation
-import Path
+import SystemPackage
 
-public func clean(_ script: Path?) throws {
-  guard let script = script else {
-    return try Path.build.delete()
+func clean(_ script: FilePath?) throws {
+  if let script, !FileManager.default.fileExists(atPath: script.string) {
+    throw CocoaError(.fileNoSuchFile)
   }
-
-  guard script.isFile else {
-    throw CocoaError.error(.fileNoSuchFile)
-  }
-
-  let path = Path.build / script.resolvedHash
-  try path.delete()
+  try BuildCache().clean(script)
 }

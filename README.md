@@ -3,70 +3,47 @@
 `swift-sh` runs single-file Swift scripts with SwiftPM dependencies declared
 next to their `import` statements.
 
-```sh
-cat <<'EOF' > script
+```swift
 #!/usr/bin/swift sh
 import Collections  // apple/swift-collections ~> 1.2
 print(Deque(["Hi", "from", "swift-sh"]))
-EOF
-chmod u+x script
-./script
 ```
 
-`swift-sh` reads dependency comments after imports, creates a cached SwiftPM
-package, builds the script executable, and runs it.
+Save this as `hello.swift` and run `swift sh hello.swift`. The script is analyzed
+with SwiftParser, built in a cached SwiftPM package, and executed with its
+arguments, working directory, standard streams, and exit status preserved.
 
 ## Requirements
 
 - Swift 6.3 or newer
-- macOS 14 or newer, or a supported GitHub-hosted Ubuntu runner
+- macOS 15 or newer, or Linux with a supported Swift toolchain
+- Building on macOS requires the macOS SDK from Xcode 26 or newer
+
+CI validates macOS 15 and 26 and Ubuntu 22.04 with Swift 6.3. Local release
+validation also covers macOS 27. Compiler requirements and system deployment
+versions are maintained separately.
 
 ## Installation
 
 ```sh
-brew install swift-sh
+brew install swift-library/tap/swift-sh
+swift sh --version
 ```
 
-You can also build from source:
+The organization tap is
+[swift-library/homebrew-tap](https://github.com/swift-library/homebrew-tap).
+To build a release from source:
 
 ```sh
-swift build
+git clone --branch v0.1.0 https://github.com/swift-library/swift-sh.git
+cd swift-sh
+swift build -c release --force-resolved-versions
 ```
 
-The primary executable is `swift-sh`. When it is on `PATH`, Swift can invoke it
-as `swift sh`.
+Put the resulting `swift-sh` executable on `PATH`. Swift then invokes it as
+`swift sh`.
 
-## Quick Start
-
-Create a script:
-
-```swift
-#!/usr/bin/swift sh
-
-import Foundation
-import Collections  // apple/swift-collections ~> 1.2
-
-var queue = Deque(["build", "run", "ship"])
-while let item = queue.popFirst() {
-  print(item)
-}
-```
-
-Run it directly through `swift-sh`:
-
-```sh
-swift sh foo.swift
-```
-
-Or make it executable:
-
-```sh
-chmod u+x foo.swift
-mv foo.swift foo
-./foo
-```
-
-## Common Commands
+## Commands
 
 ```text
 swift sh <script> [arguments]
@@ -75,106 +52,55 @@ swift sh -- [arguments]
 swift sh package <script> [--force] [--move]
 swift sh open <script> [--xcode]
 swift sh cache clean [<script>]
+swift sh --version
 ```
 
-- `swift sh <script>` builds and runs a script.
-- `swift sh package <script>` creates a SwiftPM package from a script.
-- `swift sh open <script>` opens the generated package source in `$EDITOR`.
-- `swift sh open --xcode <script>` opens the generated SwiftPM package in Xcode.
-- `swift sh cache clean` removes all cached script builds, or one script's cache
-  when a script path is provided.
+Arguments after a script path or an explicit stdin marker are passed to the
+script. Scripts may use top-level statements or an `@main` entry point.
 
-For complete command behavior, see
-[Command Reference](Documentation/Reference/Commands.md).
+`package` creates a standalone SwiftPM package beside the script. `open` opens
+the generated source in `$EDITOR`, or its package in Xcode with `--xcode`.
+`cache clean` removes all generated builds, or one file's build when given a
+script path. See the [command reference](Documentation/Reference/Commands.md)
+for input handling, packaging behavior, and exit codes.
 
-## Dependency Comments
-
-Dependencies are declared in comments after import lines:
+## Dependencies
 
 ```swift
 import ExampleKit      // @example
 import ArgumentParser  // apple/swift-argument-parser ~> 1.8
 import Markdown        // swiftlang/swift-markdown == 0.8.0
-import Collections     // apple/swift-collections
-import BumbleButt      // https://example.com/bb.git ~> 9
 import Foo             // ./my/project
 ```
 
-Transitive dependencies do not need comment specifications. For the full
-grammar, supported repository forms, local path rules, and version constraints,
-see [Import Specifications](Documentation/Reference/ImportSpecifications.md).
+Only direct dependencies need comments. Versions support abbreviated numbers,
+a `v` prefix, and prerelease identifiers; `~>` uses SwiftPM's next-major range.
+Use explicit versions for repeatable scripts. Local paths resolve beside a
+file-backed script, or against the current directory for streamed input.
 
-## Script Arguments
+The [import reference](Documentation/Reference/ImportSpecifications.md) covers
+repository forms, versions, member imports, and conditional compilation.
 
-Arguments after the script path are passed through to the compiled script:
-
-```sh
-swift sh deploy.swift --env production --dry-run
-```
-
-For complex script CLIs, import Swift Argument Parser in the script itself:
-
-```swift
-import ArgumentParser  // apple/swift-argument-parser ~> 1.8
-
-@main
-struct Deploy: ParsableCommand {
-  @Option var env: String
-  @Flag var dryRun: Bool
-}
-```
-
-## Editing And Packaging
-
-Use `swift sh open ./myScript` to generate the cached package and open the
-generated source in `$EDITOR`. Use `swift sh open --xcode ./myScript` on macOS
-to open the generated SwiftPM package in Xcode. This opens the SwiftPM package
-directly; it does not generate an `.xcodeproj`.
-
-Use `swift sh package foo.swift` when a script should become a normal SwiftPM
-package. The command creates `./Foo` and copies the script into the SwiftPM
-source tree. Add `--move` to move the original script into the generated
-package.
-
-## Use In CI
-
-Scripts can be streamed through stdin:
-
-```sh
-brew install swift-sh
-swift sh <(curl https://example.com/yourscript) arg1 arg2
-```
-
-## Examples
+## Examples and Documentation
 
 - [Terminal Rainbow](Examples/terminal-rainbow)
-- [Swift Markdown example](Examples/markdown)
-- [PostgreSQL Check](https://gist.github.com/joscdk/c4b89add26509c6dfabf84974e62543d)
-
-## Documentation
-
+- [Swift Markdown](Examples/markdown)
+- [Async entry point](Examples/async-main-count-lines)
 - [Documentation index](Documentation/README.md)
 - [Runtime architecture](Documentation/Architecture/RuntimeArchitecture.md)
-- [Reference material](Documentation/Reference/README.md)
 - [Contributing](CONTRIBUTING.md)
+- [Security reports](SECURITY.md)
+- [Changelog](CHANGELOG.md)
 
-## Sponsorship
+## Maintenance and License
 
-If your company depends on `swift-sh`, please consider sponsoring the project.
+The latest release line receives maintenance. Dependencies and GitHub Actions
+are checked weekly through pull requests and compatibility CI. Versions follow
+SemVer: breaking changes in 0.x advance the minor version. See the
+[version policy](Documentation/Architecture/VersioningAndRelease.md).
 
-## Troubleshooting
-
-If you see an error like:
-
-```text
-error: unable to invoke subcommand: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-sh
-```
-
-install `swift-sh` and ensure it is on `PATH`:
-
-```sh
-brew install swift-sh
-```
+`swift-sh` is distributed under the [Unlicense](LICENSE.md). [NOTICE](NOTICE)
+records source ownership, provenance, and separately licensed release tooling.
 
 [badge-platforms]: https://img.shields.io/badge/platforms-macOS%20%7C%20Linux-lightgrey.svg
 [badge-languages]: https://img.shields.io/badge/swift-6.3-orange.svg

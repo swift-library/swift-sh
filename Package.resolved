@@ -1,42 +1,6 @@
 {
-  "originHash" : "cd54625a38c1b252d272f94633dddad154c6f6cfb37c4fe02a01547684a906ae",
+  "originHash" : "cabfa52bd906b1263ca4ebe12fe73c766ae1e590596d6f139ac1d7948e78eea2",
   "pins" : [
-    {
-      "identity" : "cryptoswift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/krzyzanowskim/CryptoSwift",
-      "state" : {
-        "revision" : "f2a627b84c1ff96f21ac2fcb623ab36142dd5512",
-        "version" : "1.10.0"
-      }
-    },
-    {
-      "identity" : "legibleerror",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/mxcl/LegibleError",
-      "state" : {
-        "revision" : "bc596702d7ff618c3f90ba480eeb48b3e83a2fbe",
-        "version" : "1.0.6"
-      }
-    },
-    {
-      "identity" : "path.swift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/mxcl/Path.swift",
-      "state" : {
-        "revision" : "74ec90bbe50a3376e399286fed48b60db9b91bb1",
-        "version" : "1.6.0"
-      }
-    },
-    {
-      "identity" : "streamreader",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/mxcl/StreamReader",
-      "state" : {
-        "revision" : "0cabaa9d539037da1b25b8cbe58a8ecafaedea67",
-        "version" : "1.0.1"
-      }
-    },
     {
       "identity" : "swift-argument-parser",
       "kind" : "remoteSourceControl",
@@ -47,12 +11,57 @@
       }
     },
     {
-      "identity" : "version",
+      "identity" : "swift-asn1",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/mxcl/Version",
+      "location" : "https://github.com/apple/swift-asn1.git",
       "state" : {
-        "revision" : "3043fcd2a50375db76d89ff206a612471833d1c2",
-        "version" : "2.2.1"
+        "revision" : "3b6410f7dee09eb33cdd26260c5fd47fda19b0e2",
+        "version" : "1.7.3"
+      }
+    },
+    {
+      "identity" : "swift-crypto",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-crypto",
+      "state" : {
+        "revision" : "a9d1d5ab8951ada40cafff8c8e2b551dfde4f390",
+        "version" : "5.0.0"
+      }
+    },
+    {
+      "identity" : "swift-semver",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swift-library/swift-semver",
+      "state" : {
+        "revision" : "0e197d14e03340226e63e7ea851a6004531368d8",
+        "version" : "0.1.0"
+      }
+    },
+    {
+      "identity" : "swift-subprocess",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-subprocess",
+      "state" : {
+        "revision" : "b3937ab85dd32f6e9435914599c1519074769c1a",
+        "version" : "1.0.0"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax",
+      "state" : {
+        "revision" : "79e4b74a295b6eb74a8b585e3a39d29e70c1dbd1",
+        "version" : "603.0.2"
+      }
+    },
+    {
+      "identity" : "swift-system",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-system",
+      "state" : {
+        "revision" : "869129b7bf4ecc57b97d0193ad29690ca2134750",
+        "version" : "1.8.1"
       }
     }
   ],

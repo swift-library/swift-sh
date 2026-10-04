@@ -1,89 +1,90 @@
 # Runtime Architecture
 
-## Scope / Purpose
+## Scope
 
-This document describes the current runtime structure for `swift-sh`: how a
-script request becomes a generated SwiftPM package, how dependencies are
-resolved, and how the final executable is run.
+`swift-sh` is the sole public SwiftPM product. Its implementation lives in the
+internal `Sh` executable target; `ShTests` validates syntax and command behavior
+using Swift Testing.
 
-## Context / Boundaries
+## Dependencies and Ownership
 
-`swift-sh` is a SwiftPM command line package. The public executable product is
-`swift-sh`, backed by the internal `Sh` executable target under `Sources/Sh`.
-Tests live in the `ShTests` test target under `Tests/ShTests`.
+Swift Argument Parser owns command declarations and help. SwiftParser and
+SwiftSyntax own Swift syntax recognition. Swift System supplies paths and file
+descriptors, Foundation supplies file operations and input handles, and Swift
+Subprocess owns asynchronous SwiftPM execution. SemVer owns strict version
+parsing; script-specific abbreviations and revision fallback belong to Sh.
+SHA-256 uses CryptoKit on macOS and Swift Crypto on Linux.
 
-The package does not publish library products and does not generate
-`.xcodeproj` files.
+The package uses Swift 6.3 and supports macOS 15 and Linux. Its macOS source
+build needs the SDK from Xcode 26 or newer for Swift Subprocess. Dependency
+ranges and `Package.resolved` constrain the supported compiler line.
 
-The runtime does not try to become a general Swift parser. It extracts
-dependency metadata from import-line comments and delegates package resolution
-and compilation to SwiftPM.
+## Input and Analysis
 
-## Constraints
+`ScriptSource` reads a file, stdin, or named pipe once into a UTF-8 snapshot.
+It owns the resolved source identity and directory for relative dependencies.
+A leading shebang becomes a comment on the same line; script contents and
+subsequent diagnostic line numbers are preserved.
 
-- The repository supports Swift 6.3 or newer.
-- The package platform floor is macOS 14.
-- Script dependencies are expressed as SwiftPM package requirements generated
-  from import comments.
-- Local dependency paths are resolved relative to the script path when the
-  script is file-backed.
+`ScriptAnalysis` walks real syntax nodes to collect imports, their trailing
+line comments, and `@main` attributes. Comments and string literals cannot
+create declarations. Both branches of conditional compilation are collected;
+condition evaluation remains the compiler's responsibility.
 
-## Current Structure
+`ImportSpecification` adapts import metadata to SwiftPM package and product
+requirements. The imported module name must identify an exported library
+product. It normalizes supported repository forms, resolves local paths, and
+escapes strings through the manifest renderer.
 
-- `swift-sh` parses command-line arguments into modes such as run, package,
-  open, cache clean, and help.
-- Run mode reads a file, stdin, or named pipe, strips the shebang for generated
-  source where needed, detects `@main`, and collects import specifications.
-- Script execution writes a generated SwiftPM package under the `swift-sh`
-  cache directory, writes `deps.json` for dependency cache comparison, builds
-  with `swift build`, then replaces the process with the generated executable.
-- File-backed scripts use a cache directory derived from the resolved script
-  path hash. Stdin and named-pipe inputs use stable synthetic names.
-- File-backed script rebuild checks compare the executable mtime against the
-  script and any local dependency files.
-- Package mode creates a standalone SwiftPM package from the script with
-  SwiftPM CLI commands. It copies the original script by default and moves it
-  only when `--move` is provided.
-- Open mode writes the generated package first, then opens either the generated
-  source in `$EDITOR` or, on macOS, the generated SwiftPM package in Xcode. It
-  does not generate `.xcodeproj` files.
+## Generated Package and Cache
 
-## Cache Locations
+`Script` renders the full manifest and a generated source copy. Top-level code
+uses `main.swift`; attributed entry points use `Root.swift`. Switching entry
+forms removes the previous generated entry. Generated writes preserve the
+user-owned source file, including when an old cache entry is a symbolic link.
+The generated package uses the current host macOS deployment version.
 
-`XDG_CACHE_HOME` overrides the parent cache location. If it is unset:
+`BuildCache` uses SHA-256 identities. File inputs key by their resolved path;
+stream inputs key by source contents, input kind, and dependency directory.
+`XDG_CACHE_HOME` overrides the parent cache directory. Otherwise macOS uses
+`$HOME/Library/Developer/swift-sh.cache` and Linux uses `$HOME/.cache/swift-sh`.
 
-- macOS uses `$HOME/Library/Developer/swift-sh.cache`
-- Linux uses `$HOME/.cache/swift-sh`
+A successful build records hashes of the generated source and manifest, the
+selected toolchain identity, and sorted local dependency file metadata. A
+changed input or missing binary triggers a build. Local dependency metadata
+includes file names, sizes, and modification times and excludes hidden paths.
+An unversioned remote dependency follows a broad version range when SwiftPM
+resolves it; a hot cached script retains its resolved build until invalidated
+or cleaned.
 
-## Key Principles
+Process locks serialize generation and builds for one cache key. Shared locks
+allow separate scripts to build concurrently and coordinate with whole-cache
+cleaning. Lock files live outside removable cache directories; descriptors
+close on final exec. Old cache formats are rebuilt under the new identities.
 
-- Keep the user-facing script as the source of truth.
-- Let SwiftPM own dependency resolution, build planning, and compilation.
-- Avoid rewriting generated manifests when dependency specifications have not
-  changed.
-- Preserve script line numbers when removing a shebang from stdin-backed source.
+## Toolchain and Execution
 
-## Cross-cutting Concerns
+`SwiftToolchain` resolves Swift from `PATH`, resolves the macOS system shim with
+`xcrun`, and verifies Swift 6.3 or newer. A cached version check is keyed by the
+compiler path and file metadata, host system version, and SDK/toolchain-related
+environment values.
 
-- Import comments are a compatibility contract; changes should update
-  `../Reference/ImportSpecifications.md`.
-- Command behavior is a user contract; changes should update
-  `../Reference/Commands.md`.
-- Dependency and toolchain support changes should keep `Package.swift`,
-  `Package.resolved`, CI, and README badges aligned.
+SwiftPM commands run asynchronously through Swift Subprocess. Build output goes
+directly to stderr. Captured commands consume stdout and stderr together and
+retain their termination status. A successful run replaces the swift-sh process
+with the compiled script using POSIX exec, preserving arguments, signals,
+standard streams, working directory, and the script's exit status.
 
-## Risks / Known Gaps
+## Package and Open
 
-- Import extraction is regex-based and intentionally incomplete compared to a
-  full Swift parser.
-- Unversioned dependency comments resolve to a broad latest-version range. This
-  is a single-file script convenience rather than a reproducibility guarantee.
-- The package exposes the `swift-sh` executable product only; implementation
-  code lives in the `Sh` executable target.
-- Target-level DocC catalogs are not currently present.
+`ScriptPackaging` creates a temporary package beside the script, adds its
+requirements through SwiftPM, and publishes the completed directory. Copying is
+the default. Move mode protects the original until the destination succeeds and
+restores it on a failure.
 
-## Related Decisions
+`ScriptOpening` generates the cached package before invoking `$EDITOR` or
+opening the package in Xcode. The cached source remains generated output; the
+original script is the durable source of truth.
 
-No decision records are currently maintained. Add
-`Documentation/Decisions/README.md` and individual decision records if this
-repository starts recording architectural history.
+Command contracts belong to the [command reference](../Reference/Commands.md)
+and dependency syntax to the [import reference](../Reference/ImportSpecifications.md).

@@ -1,718 +1,297 @@
+// SPDX-License-Identifier: Unlicense
+
 import Foundation
-import Path
-import StreamReader
+import Subprocess
+import SystemPackage
 import Testing
 
 @testable import Sh
 
-@Suite(.serialized)
-struct RunCommandIntegrationTests {
-  init() {
-    guard Path.build.isDirectory else { return }
-    for entry in Path.build.ls()
-    where entry.type == .directory
-      && DynamicPath(entry).path.basename().hasPrefix(scriptBaseName)
-    {
-      try? DynamicPath(entry).path.delete()
-    }
+@Suite(.serialized, .timeLimit(.minutes(2)))
+struct CommandIntegrationTests {
+  @Test func versionHelpAndUsageExits() async throws {
+    let fixture = try await CommandFixture()
+    let version = try await fixture.invoke(["--version"])
+    #expect(version.status == .exited(0))
+    #expect(version.stdout == releaseVersion + "\n")
+    #expect(version.stderr.isEmpty)
+    let help = try await fixture.invoke(["--help"])
+    #expect(help.status == .exited(0))
+    #expect(help.stdout.contains("--version"))
+    let error = try await fixture.invoke(["package", "--unknown"])
+    #expect(error.status == .exited(3))
+    #expect(error.stderr.contains("invalid usage"))
   }
 
-  @Test func testConventional() {
-    expectOutput(.resultScriptOutput, exec: .resultScript)
+  @Test func argumentsInputAndWorkingDirectory() async throws {
+    let fixture = try await CommandFixture()
+    let path = try fixture.script(
+      "import Foundation\nprint(CommandLine.arguments.dropFirst().joined(separator: \"|\"))\nprint(readLine()!)\nprint(FileManager.default.currentDirectoryPath)\n"
+    )
+    let result = try await fixture.invoke(
+      [path.string, "--version", "value with spaces"], input: "hello\n")
+    #expect(result.status == .exited(0))
+    let lines = result.stdout.split(separator: "\n").map(String.init)
+    #expect(lines.count == 3)
+    #expect(Array(lines.prefix(2)) == ["--version|value with spaces", "hello"])
+    let directory = try #require(lines.last)
+    let actual = try FileManager.default.attributesOfItem(atPath: directory)
+    let expected = try FileManager.default.attributesOfItem(atPath: fixture.directory.string)
+    #expect(actual[.systemNumber] as? NSNumber == expected[.systemNumber] as? NSNumber)
+    #expect(actual[.systemFileNumber] as? NSNumber == expected[.systemFileNumber] as? NSNumber)
   }
 
-  @Test func testNamingMismatch() {
-    expectOutput(
-      "/",
-      exec: """
-        import Path  // mxcl/Path.swift ~> 0.15
-
-        print(Path.root)
-        """)
+  @Test func streamingAndConcurrentInputs() async throws {
+    let fixture = try await CommandFixture()
+    async let first = fixture.invoke(
+      ["-", "--version"], input: "print(CommandLine.arguments[1])\n")
+    async let second = fixture.invoke(["--"], input: "print(\"second\")\n")
+    let results = try await (first, second)
+    #expect(results.0.status == .exited(0))
+    #expect(results.1.status == .exited(0))
+    #expect(results.0.stdout == "--version\n")
+    #expect(results.1.stdout == "second\n")
   }
 
-  @Test func testTestableImport() {
-    expectOutput(
-      "1.2.3",
-      exec: """
-        import Foundation
-        @testable import Version  // @mxcl ~> 1.0
-
-        print(Version(1,2,3))
-        """)
+  @Test func entrySwitchingAndCacheReuse() async throws {
+    let fixture = try await CommandFixture()
+    let path = try fixture.script("print(\"first\")\n")
+    let first = try await fixture.invoke([path.string])
+    #expect(first.stdout == "first\n")
+    let hot = try await fixture.invoke([path.string])
+    #expect(hot.stdout == "first\n")
+    #expect(!hot.stderr.contains("Building"))
+    try
+      "#!/usr/bin/swift sh\n@main struct Program { static func main() { print(\"#!literal\") } }\n"
+      .write(to: fileURL(path), atomically: true, encoding: .utf8)
+    let attributed = try await fixture.invoke([path.string])
+    #expect(attributed.status == .exited(0))
+    #expect(attributed.stdout == "#!literal\n")
+    let source = try ScriptSource(reading: .file(path))
+    let generated = fixture.cache.directory(for: source)
+    #expect(!FileManager.default.fileExists(atPath: generated.appending("main.swift").string))
+    try "print(\"third\")\n".write(to: fileURL(path), atomically: true, encoding: .utf8)
+    let topLevel = try await fixture.invoke([path.string])
+    #expect(topLevel.status == .exited(0))
+    #expect(topLevel.stdout == "third\n")
+    #expect(!FileManager.default.fileExists(atPath: generated.appending("Root.swift").string))
   }
 
-  @Test func testTestableFullySpecifiedURL() {
-    expectOutput(
-      "2.3.4",
-      exec: """
-        import Foundation
-        @testable import Version  // https://github.com/mxcl/Version ~> 1.0
-
-        print(Version(2,3,4))
-        """)
+  @Test func concurrentRunsOfOneFile() async throws {
+    let fixture = try await CommandFixture()
+    let path = try fixture.script("print(42)\n")
+    async let first = fixture.invoke([path.string])
+    async let second = fixture.invoke([path.string])
+    let results = try await (first, second)
+    #expect(results.0.status == .exited(0))
+    #expect(results.1.status == .exited(0))
+    #expect(results.0.stdout == "42\n")
+    #expect(results.1.stdout == "42\n")
   }
 
-  @Test func testTestableExactVersion() {
-    expectOutput(
-      "3.4.5",
-      exec: """
-        import Foundation
-        @testable import Version  // mxcl/Version == 1.0.2
-
-        print(Version(3,4,5))
-        """)
+  @Test func sameNamesAndSpecificCleaning() async throws {
+    let fixture = try await CommandFixture()
+    let first = try fixture.script("print(1)\n", name: "one/hello.swift")
+    let second = try fixture.script("print(2)\n", name: "two/hello.swift")
+    #expect(try await fixture.invoke([first.string]).stdout == "1\n")
+    #expect(try await fixture.invoke([second.string]).stdout == "2\n")
+    let firstCache = fixture.cache.directory(for: try ScriptSource(reading: .file(first)))
+    let secondCache = fixture.cache.directory(for: try ScriptSource(reading: .file(second)))
+    #expect(firstCache != secondCache)
+    #expect(try await fixture.invoke(["cache", "clean", first.string]).status == .exited(0))
+    #expect(!FileManager.default.fileExists(atPath: firstCache.string))
+    #expect(FileManager.default.fileExists(atPath: secondCache.string))
+    #expect(try await fixture.invoke(["cache", "clean"]).status == .exited(0))
+    #expect(!FileManager.default.fileExists(atPath: fixture.cache.root.string))
   }
 
-  @Test func testTestableExactRevision() {
-    expectOutput(
-      ".success(5)",
-      exec: """
-        import Foundation
-        @testable import Result  // antitypical/Result == 67613b45
-
-        print(Result<Int, CocoaError>.success(5))
-        """)
+  @Test func localDependencyAndRebuild() async throws {
+    let fixture = try await CommandFixture()
+    let dependency = try fixture.library()
+    let script = try fixture.script("@testable import Fixture // ./dependency\nprint(value())\n")
+    #expect(try await fixture.invoke([script.string]).stdout == "1\n")
+    try "public func value() -> Int { 2 }\n".write(
+      to: fileURL(dependency.appending("Sources/Fixture/Fixture.swift")), atomically: true,
+      encoding: .utf8)
+    #expect(try await fixture.invoke([script.string]).stdout == "2\n")
   }
 
-  @Test func testTestableLatest() {
-    expectOutput(
-      "7.8.9",
-      exec: """
-        import Version  // @mxcl
-
-        print(Version(7,8,9))
-        """)
+  @Test func generatedCopiesProtectUserSource() throws {
+    let temporary = try TemporaryDirectory()
+    let path = temporary.path.appending("source.swift")
+    let text = "print(1)\n"
+    try text.write(to: fileURL(path), atomically: true, encoding: .utf8)
+    let source = try ScriptSource(reading: .file(path))
+    let script = Script(
+      analysis: try ScriptAnalysis(source: source),
+      cache: BuildCache(root: temporary.path.appending("cache")))
+    try FileManager.default.createDirectory(
+      at: fileURL(script.directory), withIntermediateDirectories: true)
+    try FileManager.default.createSymbolicLink(
+      atPath: script.entry.string, withDestinationPath: path.string)
+    try script.write()
+    try "generated modification\n".write(
+      to: fileURL(script.entry), atomically: true, encoding: .utf8)
+    #expect(try String(contentsOf: fileURL(path), encoding: .utf8) == text)
   }
 
-  @Test func testUseLocalDependencyWithAbsolutePath() throws {
-    let tmpdir = try Path.cwd.join("local_dep").mkdir()
-    defer { _ = try? FileManager.default.removeItem(at: tmpdir.url) }
-
-    let task = Process(arg0: "/bin/bash")
-    task.currentDirectoryPath = tmpdir.string
-    task.arguments = ["-c", "swift package init"]
-    let stdout = Pipe()
-    task.standardOutput = stdout
-    try task.go()
-    task.waitUntilExit()
-
-    expectRuns(
-      exec: """
-        import local_dep  // \(tmpdir.string)
-        """)
-  }
-
-  @Test func testUseLocalDependencyWithRelativePath() throws {
-    let depName = "local_dep"
-    let tmpDir = try Path.cwd.join(depName).mkdir()
-    defer { _ = try? FileManager.default.removeItem(at: tmpDir.url) }
-
-    // Use a dir under cwd because mkdir fails inside Path.mktemp
-    let testDir = try Path.cwd.join("tempTestDir").mkdir()
-    defer { _ = try? FileManager.default.removeItem(at: testDir.url) }
-
-    // Place the local_dep inside cwd/local_dep
-    let task = Process(arg0: "/bin/bash")
-    task.currentDirectoryPath = tmpDir.string
-    task.arguments = ["-c", "swift package init"]
-    let stdout = Pipe()
-    task.standardOutput = stdout
-    try task.go()
-    task.waitUntilExit()
-
-    // Place the script inside cwd/tempTestDir
-    // Provide "../local_dep" as the relative path to local_dep.
-    //
-    // We specifically use a different directory than cwd
-    // to test that the script's provided relative path for local_dep
-    // is relative to the script's path and not relative to the current working directory.
-    expectRuns(
-      exec: """
-           import local_dep  // ../\(depName)
-        """, path: testDir)
-  }
-
-  @Test func testStandardInputCanBeUsedInScript() throws {
-    let stdin = Pipe()
-    let stdout = Pipe()
-    let hello = "Hello\n".data(using: .utf8)!
-
-    try write(script: "print(readLine()!)") { file in
-      let task = Process(arg0: file)
-      task.standardInput = stdin
-      task.standardOutput = stdout
-
-      task.launchPath = file.string
-      try task.go()
-
-      stdin.fileHandleForWriting.write(hello)
-      task.waitUntilExit()
-
-      expectEqual(task.terminationReason, .exit)
-      expectEqual(task.terminationStatus, 0)
-
-      let got = stdout.fileHandleForReading.readDataToEndOfFile()
-
-      expectEqual(got, hello)
-    }
-  }
-
-  @Test func testStandardInputCanBeUsedBySwiftSh() throws {
-    let stdin = Pipe()
-    let stdout = Pipe()
-    let task = Process(arg0: shebang)
-    task.standardInput = stdin
-    task.standardOutput = stdout
-    try task.go()
-
-    stdin.fileHandleForWriting.write("print(\"\(#function)\")".data(using: .utf8)!)
-    stdin.fileHandleForWriting.closeFile()
-    task.waitUntilExit()
-
-    expectEqual(task.terminationReason, .exit)
-    expectEqual(task.terminationStatus, 0)
-
-    let out = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-    expectEqual(out, "\(#function)\n")
-  }
-
-  @Test func testStandardInputCanBeUsedBySwiftShWithArgument() throws {
-    let stdin = Pipe()
-    let stdout = Pipe()
-    let task = Process(arg0: shebang)
-    task.arguments = ["foobar"]
-    task.standardInput = stdin
-    task.standardOutput = stdout
-    try task.go()
-
-    stdin.fileHandleForWriting.write("print(CommandLine.arguments[1])".data(using: .utf8)!)
-    stdin.fileHandleForWriting.closeFile()
-    task.waitUntilExit()
-
-    expectEqual(task.terminationReason, .exit)
-    expectEqual(task.terminationStatus, 0)
-
-    let out = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-    expectEqual(out, "foobar\n")
-  }
-
-  @Test func testProcessSubstitution() throws {
-    try write(script: "print(\"\(#function)\")") { script in
-      let task = Process(arg0: "/bin/bash")
-      task.arguments = [
-        "-c", "\(shebang) <(cat \"\(script)\")",
-      ]
-      let stdout = try task.runSync(.stdout).string
-      expectEqual(stdout, #function)
-    }
-  }
-
-  @Test func testProcessSubstitutionWithArgument() throws {
-    try write(script: "print(CommandLine.arguments[1])") { script in
-      let task = Process(arg0: "/bin/bash")
-      task.arguments = [
-        "-c", "\(shebang) <(cat \"\(script)\") \"\(#function)\"",
-      ]
-      let stdout = try task.runSync(.stdout).string
-      expectEqual(stdout, #function)
-    }
-  }
-
-  @Test func testArguments() {
-    expectOutput(
-      ".success(3)",
-      exec: """
-        import Foundation
-        @testable import Result  // https://github.com/antitypical/Result ~> 4.1
-
-        let arg = CommandLine.arguments[1]
-        print(Result<Int, CocoaError>.success(Int(arg)!))
-        """, arg: "3")
-  }
-
-  @Test func testSwiftMarkdownExample() throws {
-    let path = Path(DynamicPath(Path(#filePath)!.parent.parent.parent).Examples.markdown)
-    let code = try StreamReader(path: path).dropFirst().joined(separator: "\n")
-    expectRuns(exec: code)
-  }
-
-  @Test func testAsyncMainCountLinesExample() throws {
-    let path = Path(#filePath)!.parent.parent.parent / "Examples" / "async-main-count-lines"
-    let code = try StreamReader(path: path).dropFirst().joined(separator: "\n")
-
-    try Path.mktemp { tmpdir in
-      let input = tmpdir / "input.txt"
-      try "one\ntwo\nthree\n".write(to: input)
-      expectOutput("3", exec: code, arg: input.string)
-    }
-  }
-
-  @Test func testRelativePath() throws {
-    try write(script: "print(123)") { file in
-      let task = Process(arg0: file)
-      task.launchPath = "/bin/sh"
-      task.arguments = ["-c", "./\(file.basename())"]
-      task.currentDirectoryPath = file.parent.string
-      let stdout = try task.runSync(.stdout).string?.chuzzled()
-      expectEqual(stdout, "123")
-    }
-  }
-
-  @Test func testCWD() throws {
-    let cwd = FileManager.default.currentDirectoryPath
-    let script = """
-      import Foundation
-      print(FileManager.default.currentDirectoryPath)
+  @Test(.timeLimit(.minutes(2))) func largeOutputAndFinalStatus() async throws {
+    let fixture = try await CommandFixture()
+    let path = try fixture.script(
       """
-    expectOutput(cwd, exec: script)
-  }
-
-  @Test func testStdinScriptChangesAreSeen() throws {
-    func go(input: String, line: UInt = #line) throws -> String? {
-      let stdin = Pipe()
-      let stdout = Pipe()
-      let task = Process(arg0: shebang)
-      task.standardInput = stdin
-      task.standardOutput = stdout
-      try task.go()
-
-      stdin.fileHandleForWriting.write(input.data(using: .utf8)!)
-      stdin.fileHandleForWriting.closeFile()
-      task.waitUntilExit()
-
-      expectEqual(task.terminationReason, .exit, line: line)
-      expectEqual(task.terminationStatus, 0, line: line)
-
-      expectEqual(
-        try String(contentsOf: Path.build / "StandardInput/main.swift"), input, line: line)
-
-      return String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-    }
-    for x in 1...3 {
-      expectEqual(try go(input: "print(\(x))"), "\(x)\n")
-
-      #if swift(>=5)
+      import Foundation
+      let data = Data(repeating: 65, count: 1_048_576)
+      try FileHandle.standardOutput.write(contentsOf: data)
+      try FileHandle.standardError.write(contentsOf: data)
+      print("tail")
+      exit(7)
+      """)
+    let result = try await fixture.invoke([path.string])
+    #expect(result.status == .exited(7))
+    #expect(result.stdout.utf8.count == 1_048_581)
+    #expect(result.stdout.hasSuffix("tail\n"))
+    #expect(result.stderr.hasSuffix(String(repeating: "A", count: 1_048_576)))
+    let signaled = try fixture.script(
+      """
+      #if os(Linux)
+      import Glibc
       #else
-        // sleep or race condition bug in SwiftPM 4.2 causes these tests to fail
-        sleep(1)
+      import Darwin
       #endif
-    }
+      raise(SIGTERM)
+      """, name: "signal.swift")
+    let signaledResult = try await fixture.invoke([signaled.string])
+    #expect(signaledResult.status == .signaled(15), "\(signaledResult.stderr)")
   }
 
-  @Test func testTwoScriptsSameNameWork() throws {
-    // In the same temporary directory we create two directories each
-    // containig a script of the same name but slightly different bodies.
-    // If swift-sh cache is not disambiguating based on full path the
-    // the second script will not be built and we will see the output of
-    // the first when executing the second.
-    try Path.mktemp { tmpdir -> Void in
-
-      func create(script: String, inSubDir: String) throws -> Path {
-        let scriptDir: Path = try tmpdir.join(inSubDir).mkdir()
-        let file = scriptDir.join("\(scriptBaseName).swift")
-        try "#!\(shebang)\n\n\(script)".write(to: file)
-        try file.chmod(0o0500)
-        return file
-      }
-
-      func exec(file: Path) throws -> String? {
-        let task = Process(arg0: file)
-        task.launchPath = "/bin/sh"
-        task.arguments = ["-c", "./\(file.basename())"]
-        task.currentDirectoryPath = file.parent.string
-        let stdout = try task.runSync(.stdout).string?.chuzzled()
-        return stdout
-      }
-
-      // Note: both files must be created before either is executed to demonstrate the bug
-      let file1 = try create(script: "print(123)", inSubDir: "test")
-      let file2 = try create(script: "print(456)", inSubDir: "test2")
-
-      let stdout1 = try exec(file: file1)
-      expectEqual(stdout1, "123")
-      // A stale cache would reuse file1 and print "123" here.
-      let stdout2 = try exec(file: file2)
-      expectEqual(stdout2, "456")
-    }
+  @Test func buildFailurePreservesDiagnosticLine() async throws {
+    let fixture = try await CommandFixture()
+    let path = try fixture.script(
+      "#!/usr/bin/swift sh\n@main struct Program {\n  static func main() { unknownSymbol() }\n}\n")
+    let result = try await fixture.invoke([path.string])
+    #expect(result.status == .exited(2))
+    #expect(result.stderr.contains("Root.swift:3:"))
+    #expect(result.stderr.contains("unknownSymbol"))
+    let invalid = fixture.directory.appending("invalid.swift")
+    try Data([0xFF]).write(to: fileURL(invalid))
+    #expect(try await fixture.invoke([invalid.string]).status == .exited(2))
   }
-}
 
-@Suite(.serialized)
-struct CacheCleanCommandIntegrationTests {
-  @Test func testCanCleanSpecificScripts() throws {
-    // In the same temporary directory we create two directories each
-    // containing a script of the same name. After executing the new scripts
-    // they will both be built in different directories inside of the build
-    // directory. Running clean on the first script will remove its build
-    // directory but leave the second.
-    try Path.mktemp { tmpdir -> Void in
+  @Test(arguments: [false, true])
+  func packageCopyMoveAndRun(move: Bool) async throws {
+    let fixture = try await CommandFixture()
+    let path = try fixture.script(
+      "#!/usr/bin/swift sh\n@main struct Program { static func main() { print(3) } }\n",
+      name: "foo.swift")
+    let result = try await fixture.invoke(["package", path.string] + (move ? ["--move"] : []))
+    #expect(result.status == .exited(0))
+    #expect(FileManager.default.fileExists(atPath: path.string) == !move)
+    let generated = fixture.directory.appending("Foo")
+    let run = try await Subprocess.run(
+      .name("swift"), arguments: ["run"], workingDirectory: .init(generated.string),
+      output: .string(limit: 1_048_576), error: .string(limit: 1_048_576))
+    #expect(run.terminationStatus.isSuccess)
+    #expect(run.standardOutput == "3\n")
+  }
 
-      func create(script: String, inSubDir: String) throws -> Path {
-        let scriptDir: Path = try tmpdir.join(inSubDir).mkdir()
-        let file = scriptDir.join("\(scriptBaseName).swift")
-        try "#!\(shebang)\n\n\(script)".write(to: file)
-        try file.chmod(0o0500)
-        return file
-      }
+  @Test func packagingFailureRestoresOriginal() async throws {
+    let fixture = try await CommandFixture()
+    let path = try fixture.script("#!/usr/bin/swift sh\nprint(1)\n", name: "foo.swift")
+    let occupied = fixture.directory.appending("Foo")
+    try FileManager.default.createDirectory(
+      at: fileURL(occupied), withIntermediateDirectories: true)
+    let result = try await fixture.invoke(["package", path.string, "--move"])
+    #expect(result.status == .exited(2))
+    #expect(
+      try String(contentsOf: fileURL(path), encoding: .utf8) == "#!/usr/bin/swift sh\nprint(1)\n")
+  }
 
-      func exec(file: Path) throws -> String? {
-        let task = Process(arg0: file)
-        task.launchPath = "/bin/sh"
-        task.arguments = ["-c", "./\(file.basename())"]
-        task.currentDirectoryPath = file.parent.string
-        let stdout = try task.runSync(.stdout).string?.chuzzled()
-        return stdout
-      }
+  @Test func packageForceAndFilenameClash() async throws {
+    let fixture = try await CommandFixture()
+    let plain = try fixture.script("print(8)\n", name: "plain.swift")
+    #expect(try await fixture.invoke(["package", plain.string]).status == .exited(2))
+    #expect(try await fixture.invoke(["package", plain.string, "--force"]).status == .exited(0))
+    let clash = try fixture.script("#!/usr/bin/swift sh\nprint(9)\n", name: "foo")
+    #expect(try await fixture.invoke(["package", clash.string, "--move"]).status == .exited(0))
+    #expect(
+      FileManager.default.fileExists(
+        atPath: fixture.directory.appending("Foo/Package.swift").string))
+  }
 
-      func clean(file: Path) throws -> (Process.TerminationReason, Int32) {
-        let task = Process()
-        task.launchPath = shebang
-        task.arguments = ["cache", "clean", file.string]
-        try task.go()
-        task.waitUntilExit()
-        return (task.terminationReason, task.terminationStatus)
-      }
-
-      let file1 = try create(script: "print(123)", inSubDir: "\(#function)-1")
-      let file2 = try create(script: "print(456)", inSubDir: "\(#function)-2")
-
-      let file1BuildPath = Path.build / file1.resolvedHash
-      let file2BuildPath = Path.build / file2.resolvedHash
-
-      let _ = try exec(file: file1)
-      let _ = try exec(file: file2)
-
-      expect(file1BuildPath.exists)
-      expect(file2BuildPath.exists)
-
-      let (reason, status) = try clean(file: file1)
-      expectEqual(reason, .exit)
-      expectEqual(status, 0)
-
-      expectFalse(file1BuildPath.exists)
-      expect(file2BuildPath.exists)
-    }
+  @Test func editorAndNamedPipe() async throws {
+    let fixture = try await CommandFixture()
+    let path = try fixture.script("print(1)\n")
+    let opened = try await fixture.invoke(
+      ["open", path.string], environment: ["EDITOR": "/bin/cat"])
+    #expect(opened.status == .exited(0))
+    #expect(opened.stdout == "print(1)\n")
+    #expect(
+      try await fixture.invoke(
+        ["open", path.string], environment: ["EDITOR": "missing-swift-sh-editor"]
+      ).status == .exited(2))
+    let substituted = try await Subprocess.run(
+      .path("/bin/bash"),
+      arguments: ["-c", "\"$1\" <(printf 'print(42)')", "bash", fixture.binary.string],
+      environment: .inherit.updating(["XDG_CACHE_HOME": fixture.cacheParent.string]),
+      workingDirectory: .init(fixture.directory.string), output: .string(limit: 1_048_576),
+      error: .string(limit: 1_048_576))
+    #expect(substituted.terminationStatus.isSuccess)
+    #expect(substituted.standardOutput == "42\n")
   }
 }
 
-@Suite(.serialized)
-struct PackageCommandIntegrationTests {
-  @Test func testPackageCopiesByDefault() throws {
-    try writePackageScript(script: .resultScript) { file in
-      try self.assertPackage(file: file, move: false, force: false)
-    }
+private struct CommandFixture: Sendable {
+  let temporary: TemporaryDirectory
+  let binary: FilePath
+  var directory: FilePath { temporary.path }
+  var cacheParent: FilePath { directory.appending("cache") }
+  var cache: BuildCache { BuildCache(root: cacheParent.appending("swift-sh")) }
+
+  init() async throws {
+    temporary = try TemporaryDirectory()
+    let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+      .deletingLastPathComponent().deletingLastPathComponent()
+    binary = FilePath(
+      ProcessInfo.processInfo.environment["SWIFT_SH_TEST_BINARY"]
+        ?? root.appendingPathComponent(".build/debug/swift-sh").path)
+    try #require(FileManager.default.isExecutableFile(atPath: binary.string))
   }
 
-  @Test func testPackageCanMoveScript() throws {
-    try writePackageScript(script: .resultScript) { file in
-      try self.assertPackage(file: file, move: true, force: false)
-    }
+  func invoke(_ arguments: [String], input: String = "", environment: [String: String] = [:])
+    async throws -> (stdout: String, stderr: String, status: TerminationStatus)
+  {
+    var variables = Dictionary(
+      uniqueKeysWithValues: environment.map {
+        (Environment.Key(stringLiteral: $0.key), Optional($0.value))
+      })
+    variables["XDG_CACHE_HOME"] = cacheParent.string
+    let result = try await Subprocess.run(
+      .path(.init(binary.string)), arguments: Arguments(arguments),
+      environment: .inherit.updating(variables), workingDirectory: .init(directory.string),
+      input: .string(input), output: .string(limit: 4_194_304), error: .string(limit: 4_194_304))
+    return (result.standardOutput, result.standardError, result.terminationStatus)
   }
 
-  @Test func testForce() throws {
-    try Path.mktemp { tmpdir in
-      let file = tmpdir / "foo.swift"
-      try String.resultScript.write(to: file)
-      try assertPackage(file: file, move: false, force: true)
-    }
+  func script(_ text: String, name: String = "hello.swift") throws -> FilePath {
+    let path = directory.appending(name)
+    try FileManager.default.createDirectory(
+      at: fileURL(path.removingLastComponent()), withIntermediateDirectories: true)
+    try text.write(to: fileURL(path), atomically: true, encoding: .utf8)
+    return path
   }
 
-  @Test func testFilenameDirectoryClash() throws {
-    // if the file is `foo` and we will create a package `Foo` in the same directory
-    // this is a filename clash on macOS with its case insensitive filesystem
-    // and we still should *work*
-    //TODO should check the filesystem is insenstive to verify test is working
-
-    try Path.mktemp { tmpdir -> Void in
-      let file = tmpdir / "foo"
-      try """
-      #!/usr/bin/swift sh
-
-      print(123)
-      """.write(to: file)
-
-      let task = Process()
-      task.launchPath = shebang
-      task.arguments = ["package", "--move", file.string]
-      try task.go()
-      task.waitUntilExit()
-
-      expectEqual(task.terminationReason, .exit)
-      expectEqual(task.terminationStatus, 0)
-
-      let d = tmpdir / "Foo"
-
-      expectFalse(file.isFile)
-      expect(d.isDirectory)
-      expect(d.join("Package.swift").isFile)
-      expect(d.join("Sources").isDirectory)
-      expect(d.join("Sources/Foo/Foo.swift").isFile)
-    }
-  }
-
-  @Test func testRelativePath() throws {
-    try Path.mktemp { tmpdir -> Void in
-      let file = tmpdir / "foo.swift"
-      try "#!/usr/bin/swift sh".write(to: file)
-
-      let task = Process()
-      task.launchPath = shebang
-      task.arguments = ["package", file.basename()]
-      task.currentDirectoryPath = tmpdir.string
-      try task.go()
-      task.waitUntilExit()
-
-      expectEqual(task.terminationReason, .exit)
-      expectEqual(task.terminationStatus, 0)
-
-      let d = tmpdir / "Foo"
-
-      expect(file.isFile)
-      expect(d.isDirectory)
-      expect(d.join("Package.swift").isFile)
-      expect(d.join("Sources").isDirectory)
-      expect(d.join("Sources/Foo/Foo.swift").isFile)
-    }
-  }
-
-  @Test func testWorksIfSymlinkBecomesBroken() {
-    // creates two scripts for the same cache location
-    // thus when the first is complete the `main.swift` symlink becomes broken
-    // this is a regression test
-
-    expectRuns(exec: "print(1)", line: 100)
-    expectRuns(exec: "print(2)", line: 100)
-  }
-
-  @Test func testFailsIfNotScript() throws {
-    try Path.mktemp { tmpdir -> Void in
-      let file = tmpdir / "foo"
-      try "foo".write(to: file)
-      let pipe = Pipe()
-      let task = Process()
-      task.launchPath = shebang
-      task.arguments = ["package", file.string]
-      task.standardError = pipe
-      try task.go()
-      task.waitUntilExit()
-
-      let stderr = String(
-        data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?.chuzzled()
-
-      expectEqual(task.terminationReason, .exit)
-      expectEqual(task.terminationStatus, 2)
-      expectEqual(stderr, "error: " + PackageError.notScript.errorDescription!)
-    }
-  }
-
-  @Test func testPackageMapsImportSpecificationConstraints() throws {
-    try Path.mktemp { tmpdir in
-      let localDependency = try (tmpdir / "local_dep").mkdir()
-      let initTask = Process(arg0: Path.swift)
-      initTask.arguments = ["package", "init", "--type", "library", "--name", "local_dep"]
-      initTask.currentDirectoryPath = localDependency.string
-      try initTask.go()
-      initTask.waitUntilExit()
-      expectEqual(initTask.terminationReason, .exit)
-      expectEqual(initTask.terminationStatus, 0)
-
-      let file = tmpdir / "foo.swift"
-      try """
-      #!/usr/bin/swift sh
-      import Path  // mxcl/Path.swift ~> 1.6.0
-      import Version  // mxcl/Version == 2.2.1
-      import Result  // antitypical/Result == 67613b45
-      import StreamReader  // mxcl/StreamReader
-      import local_dep  // ./local_dep
-      """.write(to: file)
-
-      let task = Process(arg0: shebang)
-      task.arguments = ["package", file.string]
-      try task.go()
-      task.waitUntilExit()
-      expectEqual(task.terminationReason, .exit)
-      expectEqual(task.terminationStatus, 0)
-
-      let manifest = try String(contentsOf: (tmpdir / "Foo" / "Package.swift").url)
-      expect(
-        manifest.contains(
-          #".package(url: "https://github.com/mxcl/Path.swift.git", from: "1.6.0")"#))
-      expect(
-        manifest.contains(#".package(url: "https://github.com/mxcl/Version.git", exact: "2.2.1")"#))
-      expect(
-        manifest.contains(
-          #".package(url: "https://github.com/antitypical/Result.git", revision: "67613b45")"#))
-      expect(
-        manifest.contains(
-          #".package(url: "https://github.com/mxcl/StreamReader.git", "0.0.0" ..< "1000000.0.0")"#))
-      expect(manifest.contains(#".package(path: "\#(localDependency.string)")"#))
-    }
-  }
-
-  private func assertPackage(file: Path, move: Bool, force: Bool, line: UInt = #line) throws {
-    var arguments = ["package", file.string]
-    if force {
-      arguments.append("--force")
-    }
-    if move {
-      arguments.append("--move")
-    }
-
-    let task = Process(arg0: shebang)
-    task.arguments = arguments
-    try task.go()
-    task.waitUntilExit()
-
-    expectEqual(task.terminationReason, .exit, line: line)
-    expectEqual(task.terminationStatus, 0, line: line)
-
-    let name = file.basename(dropExtension: true).capitalized
-    let packageDirectory = file.parent / name
-    let sources = (packageDirectory / "Sources" / name).ls().filter { $0.extension == "swift" }
-
-    expectEqual(file.exists, !move, line: line)
-    expect(packageDirectory.isDirectory, line: line)
-    expect(packageDirectory.join("Package.swift").isFile, line: line)
-    expectEqual(sources.count, 1, line: line)
-
-    let build = Process(arg0: Path.swift, arg1: "run")
-    build.currentDirectoryPath = packageDirectory.string
-    let out = try build.runSync(.stdout).string
-    expectEqual(out, String.resultScriptOutput, line: line)
+  func library() throws -> FilePath {
+    let root = directory.appending("dependency")
+    try FileManager.default.createDirectory(
+      at: fileURL(root.appending("Sources/Fixture")), withIntermediateDirectories: true)
+    try """
+    // swift-tools-version:6.3
+    import PackageDescription
+    let package = Package(name: "Fixture", products: [.library(name: "Fixture", targets: ["Fixture"])], targets: [.target(name: "Fixture")])
+    """.write(to: fileURL(root.appending("Package.swift")), atomically: true, encoding: .utf8)
+    try "public func value() -> Int { 1 }\n".write(
+      to: fileURL(root.appending("Sources/Fixture/Fixture.swift")), atomically: true,
+      encoding: .utf8)
+    return root
   }
 }
-
-@Suite(.serialized)
-struct SwiftVersionSupportTests {
-  @Test func testSwiftVersionIsWhatTestsExpect() {
-    let expected = swiftVersion
-    expectOutput(
-      expected,
-      exec: """
-        import Foundation
-
-        let task = Process()
-        task.launchPath = "/usr/bin/env"
-        task.arguments = ["swift", "--version"]
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError = Pipe()
-        try! task.run()
-        task.waitUntilExit()
-
-        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)!
-        let range = output.range(of: " version \\\\d+\\\\.\\\\d+", options: .regularExpression)!
-        print(output[range].split(separator: " ").last!)
-        """)
-  }
-}
-
-private func write(
-  script: String, path: Path? = nil, line: UInt = #line, body: @escaping (Path) throws -> Void
-) throws {
-  let writeFile: (Path) throws -> Void = {
-    let file = $0.join("\(scriptBaseName)-\(line).swift")
-    try "#!\(shebang)\n\(script)".write(to: file)
-    try file.chmod(0o0500)
-    try body(file)
-
-  }
-  if let path = path {
-    try writeFile(path)
-  } else {
-    try Path.mktemp { tmpDir -> Void in
-      try writeFile(tmpDir)
-    }
-  }
-}
-
-private func writePackageScript(
-  script: String, line: UInt = #line, body: @escaping (Path) throws -> Void
-) throws {
-  try Path.mktemp { tmpDir -> Void in
-    let file = tmpDir / "foo.swift"
-    try "#!/usr/bin/swift sh\n\(script)".write(to: file)
-    try file.chmod(0o0500)
-    try body(file)
-  }
-}
-
-private func expectRuns(exec: String, path: Path? = nil, line: UInt = #line) {
-  do {
-    try write(script: exec, path: path, line: line) { file in
-      let task = Process(arg0: file)
-      try task.go()
-      task.waitUntilExit()
-
-      expectEqual(task.terminationReason, .exit, line: line)
-      expectEqual(task.terminationStatus, 0, line: line)
-    }
-  } catch {
-    fail("\(error)", line: line)
-  }
-}
-
-extension Process {
-  fileprivate convenience init(arg0: Path, arg1: String? = nil) {
-    self.init(arg0: arg0.string, arg1: arg1)
-  }
-
-  fileprivate convenience init(arg0: String, arg1: String? = nil) {
-    self.init()
-    launchPath = arg0
-    arguments = arg1.map { [$0] } ?? []
-
-    func swiftPath() throws -> String {
-      let yaml = Path.root.join(#filePath).parent.parent.parent.join(".build/debug.yaml")
-      for line in try StreamReader(path: yaml) {
-        guard let line = line.chuzzled() else { continue }
-        if line.hasPrefix("executable:"), line.hasSuffix("swiftc\"") {
-          let parts = line.split(separator: ":")
-          guard parts.count == 2 else { continue }
-          return Path.root.join(
-            parts[1].trimmingCharacters(in: .init(charactersIn: " \n\""))
-          ).parent.string
-        }
-      }
-      return "/usr/bin"
-    }
-    var env = ProcessInfo.processInfo.environment
-    env["PATH"] = "\(try! swiftPath()):\(ProcessInfo.processInfo.environment["PATH"]!)"
-    environment = env
-  }
-}
-
-private func expectOutput(_ expected: String, exec: String, arg: String? = nil, line: UInt = #line)
-{
-  do {
-    try write(script: exec, line: line) { file in
-      let task = Process(arg0: file, arg1: arg)
-      let stdout = try task.runSync(.stdout).string?.chuzzled()
-      expectEqual(stdout, expected, line: line)
-    }
-  } catch {
-    fail("\(error)", line: line)
-  }
-}
-
-private var shebang: String {
-  return Path.root.join(#filePath).parent.parent.parent.join(".build/debug/swift-sh").string
-}
-
-extension String {
-  fileprivate static var resultScript: String {
-    return """
-      import Foundation
-      import Result  // @antitypical ~> 4.1
-
-      print(Result<Int, CocoaError>.success(3))
-      """
-  }
-
-  fileprivate static var resultScriptOutput: String {
-    return ".success(3)"
-  }
-}
-
-private let scriptBaseName = "dev.workspace.swift-sh-tests"
