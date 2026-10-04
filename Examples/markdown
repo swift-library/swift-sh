@@ -1,0 +1,49 @@
+#!/usr/bin/swift sh
+import Markdown  // swiftlang/swift-markdown == 0.8.0
+
+let markdown = """
+  # Swift Markdown
+
+  - Parse GitHub-flavored Markdown
+  - Walk the markup tree
+  - Inspect **inline** nodes
+  """
+
+let document = Document(parsing: markdown)
+
+struct StructurePrinter: MarkupWalker {
+  private var depth = 0
+
+  mutating func defaultVisit(_ markup: Markup) {
+    printNode(String(describing: type(of: markup)))
+    descend(into: markup)
+  }
+
+  mutating func visitHeading(_ heading: Heading) {
+    printNode("Heading(level: \(heading.level), text: \"\(heading.plainText)\")")
+    descend(into: heading)
+  }
+
+  mutating func visitStrong(_ strong: Strong) {
+    printNode("Strong(text: \"\(strong.plainText)\")")
+    descend(into: strong)
+  }
+
+  mutating func visitText(_ text: Text) {
+    printNode("Text(\"\(text.string)\")")
+  }
+
+  private mutating func descend(into markup: Markup) {
+    depth += 1
+    descendInto(markup)
+    depth -= 1
+  }
+
+  private func printNode(_ label: String) {
+    print("\(String(repeating: "  ", count: depth))- \(label)")
+  }
+}
+
+print("Document tree:")
+var printer = StructurePrinter()
+printer.visit(document)

@@ -1,0 +1,15 @@
+#!/usr/bin/swift sh
+import ArgumentParser  // apple/swift-argument-parser ~> 1.4.0
+import Foundation
+
+/// Counts the lines of a file, reading it asynchronously.
+@main
+struct CountLines: AsyncParsableCommand {
+  @Argument(transform: URL.init(fileURLWithPath:))
+  var inputFile: URL
+  mutating func run() async throws {
+    let fileHandle = try FileHandle(forReadingFrom: inputFile)
+    let lineCount = try await fileHandle.bytes.lines.reduce(into: 0) { count, _ in count += 1 }
+    print(lineCount)
+  }
+}
