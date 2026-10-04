@@ -141,12 +141,7 @@ enum Mode {
     case "--help", "-h":
       self = .help(CommandLine.usage)
     default:
-      let path = command.asFilePath
-      if isTTY || FileManager.default.fileExists(atPath: path.string) {
-        self = .run(.file(path), args: ArraySlice(arguments.dropFirst()))
-      } else {
-        self = .run(.stdin, args: ArraySlice(arguments))
-      }
+      self = .run(.file(command.asFilePath), args: ArraySlice(arguments.dropFirst()))
     }
   }
 

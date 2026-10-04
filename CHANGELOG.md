@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1
+
+- Report a script path that does not exist, naming the path and exiting with status 2, instead of running piped standard input as the script. Standard input is read as the script only for `swift sh -`, `swift sh --`, or `swift sh` with no arguments.
+
 ## 0.1.0
 
 - Run file, stdin and named-pipe Swift scripts with inline SwiftPM dependencies.

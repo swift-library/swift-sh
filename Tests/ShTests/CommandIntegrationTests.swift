@@ -53,6 +53,15 @@ struct CommandIntegrationTests {
     #expect(results.1.stdout == "second\n")
   }
 
+  @Test func missingScriptIgnoresPipedInput() async throws {
+    let fixture = try await CommandFixture()
+    let result = try await fixture.invoke(["greeet.swift", "value"], input: "print(1)\n")
+    #expect(result.status == .exited(2))
+    #expect(result.stdout.isEmpty)
+    #expect(result.stderr.contains("greeet.swift"))
+    #expect(result.stderr.contains("No such file or directory"))
+  }
+
   @Test func entrySwitchingAndCacheReuse() async throws {
     let fixture = try await CommandFixture()
     let path = try fixture.script("print(\"first\")\n")

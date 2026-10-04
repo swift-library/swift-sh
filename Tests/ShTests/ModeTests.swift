@@ -54,29 +54,23 @@ struct ModeTests {
     #expect(Array(arguments) == ["--version", "package"])
   }
 
-  @Test func scriptArgumentsAndImplicitStdin() throws {
+  @Test(arguments: [true, false])
+  func scriptArgumentsAndImplicitStdin(isTTY: Bool) throws {
     guard
       case .run(.file(let path), let arguments) = try Mode(
-        for: ["swift-sh", "script.swift", "--help", "--version"], isTTY: true)
+        for: ["swift-sh", "missing.swift", "--help", "--version"], isTTY: isTTY)
     else {
       Issue.record("Expected a script path")
       return
     }
-    #expect(path == absolutePath("script.swift"))
+    #expect(path == absolutePath("missing.swift"))
     #expect(Array(arguments) == ["--help", "--version"])
-    guard
-      case .run(.stdin, let streamed) = try Mode(
-        for: ["swift-sh", "hello", "--option"], isTTY: false)
-    else {
-      Issue.record("Expected implicit stdin")
-      return
-    }
-    #expect(Array(streamed) == ["hello", "--option"])
     #expect(throws: CommandLine.Error.self) { try Mode(for: ["swift-sh"], isTTY: true) }
-    guard case .run(.stdin, _) = try Mode(for: ["swift-sh"], isTTY: false) else {
+    guard case .run(.stdin, let streamed) = try Mode(for: ["swift-sh"], isTTY: false) else {
       Issue.record("Expected stdin for a pipe")
       return
     }
+    #expect(streamed.isEmpty)
   }
 
   @Test(arguments: [false, true])
