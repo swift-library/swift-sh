@@ -19,8 +19,13 @@ from imports, builds a cached SwiftPM package, and executes the generated
 binary. Arguments after the script path are forwarded to the script without
 being parsed by `swift-sh`.
 
-When stdin is not a TTY, `swift sh` can read script source from stdin. Use `-`
-or `--` to force stdin mode when needed.
+`swift sh - [arguments]` and `swift sh -- [arguments]` read the script source
+from stdin and forward every following argument to the script. Without any
+arguments, `swift sh` reads the script from stdin when stdin is not a TTY and
+reports invalid usage when it is. Any other first argument is a script path,
+whether or not stdin is a TTY, and may name a file or a named pipe. A script
+path that cannot be opened, such as a missing file, is a command failure;
+swift-sh names the path and does not read stdin.
 
 ## Package A Script
 

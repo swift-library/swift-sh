@@ -32,7 +32,12 @@ struct ScriptSource: Sendable {
       name = "StandardInput"
       dependencyDirectory = absolutePath(FileManager.default.currentDirectoryPath)
     case .file(let file):
-      let descriptor = try FileDescriptor.open(file, .readOnly, options: [.closeOnExec])
+      let descriptor: FileDescriptor
+      do {
+        descriptor = try FileDescriptor.open(file, .readOnly, options: [.closeOnExec])
+      } catch let error as Errno {
+        throw SourceError.unreadableScript(file.string, error.rawValue)
+      }
       let handle = FileHandle(fileDescriptor: descriptor.rawValue, closeOnDealloc: true)
       defer { try? handle.close() }
       var attributes = stat()
@@ -63,6 +68,7 @@ struct ScriptSource: Sendable {
 }
 
 enum SourceError: LocalizedError {
+  case unreadableScript(String, Int32)
   case invalidUTF8
   case invalidDependency(String)
   case invalidConstraint(String)
@@ -70,6 +76,8 @@ enum SourceError: LocalizedError {
 
   var errorDescription: String? {
     switch self {
+    case .unreadableScript(let path, let code):
+      return "Cannot open script \(path): \(strerror(code))"
     case .invalidUTF8: return "Script input must be valid UTF-8."
     case .invalidDependency(let value): return "Invalid dependency specification: \(value)"
     case .invalidConstraint(let value): return "Invalid dependency constraint: \(value)"
