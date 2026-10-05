@@ -4,9 +4,10 @@
 import SwiftParser
 import SwiftSyntax
 
+/// The dependency directives and entry point style of one script, read from its syntax tree.
 struct ScriptAnalysis {
   let source: ScriptSource
-  let dependencies: [ImportSpecification]
+  let dependencies: [DependencyDirective]
   let hasMainAttribute: Bool
 
   init(source: ScriptSource) throws {
@@ -23,8 +24,9 @@ struct ScriptAnalysis {
       }
       for piece in trivia {
         if case .lineComment(let comment) = piece {
-          return try ImportSpecification(
-            module: module, comment: String(comment.dropFirst(2)), source: source)
+          return try DependencyDirective(
+            module: module, comment: String(comment.dropFirst(2)),
+            baseDirectory: source.dependencyDirectory)
         }
       }
       return nil

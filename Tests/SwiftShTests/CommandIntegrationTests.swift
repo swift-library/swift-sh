@@ -6,7 +6,7 @@ import Subprocess
 import SystemPackage
 import Testing
 
-@testable import Sh
+@testable import SwiftSh
 
 @Suite(.serialized, .timeLimit(.minutes(2)))
 struct CommandIntegrationTests {
@@ -14,7 +14,7 @@ struct CommandIntegrationTests {
     let fixture = try await CommandFixture()
     let version = try await fixture.invoke(["--version"])
     #expect(version.status == .exited(0))
-    #expect(version.stdout == releaseVersion + "\n")
+    #expect(version.stdout == SwiftSh.version + "\n")
     #expect(version.stderr.isEmpty)
     let help = try await fixture.invoke(["--help"])
     #expect(help.status == .exited(0))
@@ -132,9 +132,9 @@ struct CommandIntegrationTests {
     let text = "print(1)\n"
     try text.write(to: fileURL(path), atomically: true, encoding: .utf8)
     let source = try ScriptSource(reading: .file(path))
-    let script = Script(
+    let script = ScriptPackage(
       analysis: try ScriptAnalysis(source: source),
-      cache: BuildCache(root: temporary.path.appending("cache")))
+      cache: ScriptCache(root: temporary.path.appending("cache")))
     try FileManager.default.createDirectory(
       at: fileURL(script.directory), withIntermediateDirectories: true)
     try FileManager.default.createSymbolicLink(
@@ -282,7 +282,7 @@ private struct CommandFixture: Sendable {
   let binary: FilePath
   var directory: FilePath { temporary.path }
   var cacheParent: FilePath { directory.appending("cache") }
-  var cache: BuildCache { BuildCache(root: cacheParent.appending("swift-sh")) }
+  var cache: ScriptCache { ScriptCache(root: cacheParent.appending("swift-sh")) }
 
   init() async throws {
     temporary = try TemporaryDirectory()

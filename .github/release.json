@@ -1,7 +1,7 @@
 {
   "repository": "swift-library/swift-sh",
-  "version_file": "Sources/Sh/Version.swift",
-  "version_pattern": "(?m)^let releaseVersion = \"([^\"]+)\"$",
+  "version_file": "Sources/SwiftSh/SwiftSh.swift",
+  "version_pattern": "(?m)^  static let version = \"([^\"]+)\"$",
   "changelog": "CHANGELOG.md",
   "check_command": "Scripts/check",
   "ci": {

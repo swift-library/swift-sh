@@ -4,9 +4,10 @@
 import Foundation
 import SystemPackage
 
-struct Script {
+/// The generated SwiftPM package that builds one script.
+struct ScriptPackage {
   let analysis: ScriptAnalysis
-  let cache: BuildCache
+  let cache: ScriptCache
 
   var directory: FilePath { cache.directory(for: analysis.source) }
   var entryName: String { analysis.hasMainAttribute ? "Root.swift" : "main.swift" }
@@ -50,8 +51,8 @@ struct Script {
   func write() throws {
     let buildPaths =
       [directory.string, analysis.source.name]
-      + analysis.dependencies.compactMap { dependency -> String? in
-        guard case .local(let path) = dependency.dependencyName else { return nil }
+      + analysis.dependencies.compactMap { directive -> String? in
+        guard case .local(let path) = directive.source else { return nil }
         return path.string
       }
     if let path = buildPaths.first(where: {
@@ -93,8 +94,8 @@ struct Script {
 
   private func localDependencyFingerprint() throws -> String {
     var files: [String] = []
-    for dependency in analysis.dependencies {
-      guard case .local(let path) = dependency.dependencyName else { continue }
+    for directive in analysis.dependencies {
+      guard case .local(let path) = directive.source else { continue }
       guard
         let enumerator = FileManager.default.enumerator(
           at: fileURL(path),

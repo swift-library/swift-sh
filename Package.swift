@@ -9,7 +9,7 @@ let package = Package(
     .macOS(.v15)
   ],
   products: [
-    .executable(name: "swift-sh", targets: ["Sh"])
+    .executable(name: "swift-sh", targets: ["SwiftSh"])
   ],
   dependencies: [
     .package(url: "https://github.com/apple/swift-argument-parser", "1.8.1"..<"1.9.0"),
@@ -21,7 +21,7 @@ let package = Package(
   ],
   targets: [
     .executableTarget(
-      name: "Sh",
+      name: "SwiftSh",
       dependencies: [
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
         .product(name: "SwiftParser", package: "swift-syntax"),
@@ -32,9 +32,10 @@ let package = Package(
         .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])),
       ]),
     .testTarget(
-      name: "ShTests",
+      name: "SwiftShTests",
       dependencies: [
-        "Sh",
+        "SwiftSh",
+        .product(name: "ArgumentParser", package: "swift-argument-parser"),
         .product(name: "SemVer", package: "swift-semver"),
         .product(name: "SystemPackage", package: "swift-system"),
         .product(name: "Subprocess", package: "swift-subprocess"),
