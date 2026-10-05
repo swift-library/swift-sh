@@ -1,5 +1,5 @@
 #!/usr/bin/swift sh
-import ArgumentParser  // apple/swift-argument-parser ~> 1.4.0
+import ArgumentParser  // apple/swift-argument-parser ~> 1.8
 import Foundation
 
 /// Counts the lines of a file, reading it asynchronously.
