@@ -124,28 +124,11 @@ struct ScriptPackage {
   }
 
   private func localDependencyFingerprint() throws -> String {
-    var files: [String] = []
-    for directive in analysis.dependencies {
-      guard case .local(let path) = directive.source else { continue }
-      guard
-        let enumerator = FileManager.default.enumerator(
-          at: fileURL(path),
-          includingPropertiesForKeys: [
-            .contentModificationDateKey, .fileSizeKey, .isRegularFileKey,
-          ], options: [.skipsHiddenFiles])
-      else { throw SourceError.invalidDependency(path.string) }
-      for case let url as URL in enumerator {
-        let values = try url.resourceValues(forKeys: [
-          .contentModificationDateKey, .fileSizeKey, .isRegularFileKey,
-        ])
-        if values.isRegularFile == true {
-          files.append(
-            url.path + ":" + String(values.fileSize ?? 0) + ":"
-              + String(values.contentModificationDate?.timeIntervalSince1970 ?? 0))
-        }
-      }
-    }
-    return digest(files.sorted().joined(separator: "\n"))
+    try contentDigest(
+      of: analysis.dependencies.compactMap { directive in
+        guard case .local(let path) = directive.source else { return nil }
+        return path
+      })
   }
 }
 

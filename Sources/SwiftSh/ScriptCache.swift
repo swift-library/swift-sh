@@ -4,20 +4,11 @@
 import Foundation
 import SystemPackage
 
-#if canImport(CryptoKit)
-  import CryptoKit
-#else
-  import Crypto
-#endif
 #if os(Linux)
   import Glibc
 #else
   import Darwin
 #endif
-
-func digest(_ value: String) -> String {
-  SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
-}
 
 /// Generated script packages, keyed by script path or by standard input content.
 struct ScriptCache: Sendable {
