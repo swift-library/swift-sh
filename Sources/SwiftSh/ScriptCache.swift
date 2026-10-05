@@ -19,7 +19,8 @@ func digest(_ value: String) -> String {
   SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
 }
 
-struct BuildCache: Sendable {
+/// Generated script packages, keyed by script path or by standard input content.
+struct ScriptCache: Sendable {
   let root: FilePath
 
   init(root: FilePath? = nil) {

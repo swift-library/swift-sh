@@ -10,6 +10,12 @@ import SystemPackage
   import Darwin
 #endif
 
+/// Where a script's text comes from.
+enum ScriptInput: Equatable, Sendable {
+  case standardInput
+  case file(FilePath)
+}
+
 /// Owns one UTF-8 source snapshot and the directory used to resolve local dependencies.
 struct ScriptSource: Sendable {
   let path: FilePath?
@@ -24,10 +30,10 @@ struct ScriptSource: Sendable {
     self.dependencyDirectory = dependencyDirectory
   }
 
-  init(reading input: Mode.RunType) throws {
+  init(reading input: ScriptInput) throws {
     let data: Data
     switch input {
-    case .stdin:
+    case .standardInput:
       data = try FileHandle.standardInput.readToEnd() ?? Data()
       path = nil
       name = "StandardInput"
@@ -78,7 +84,7 @@ enum SourceError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .unreadableScript(let path, let code):
-      return "Cannot open script \(path): \(strerror(code))"
+      return "Cannot open script \(path): \(errnoDescription(code))"
     case .invalidUTF8: return "Script input must be valid UTF-8."
     case .invalidDependency(let value): return "Invalid dependency specification: \(value)"
     case .invalidConstraint(let value): return "Invalid dependency constraint: \(value)"

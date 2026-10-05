@@ -6,7 +6,7 @@ import SemVer
 import SystemPackage
 import Testing
 
-@testable import Sh
+@testable import SwiftSh
 
 struct ScriptAnalysisTests {
   @Test(arguments: [
@@ -21,9 +21,9 @@ struct ScriptAnalysisTests {
     let analysis = try ScriptAnalysis(source: source(text))
     let dependency = try #require(analysis.dependencies.first)
     #expect(analysis.dependencies.count == 1)
-    #expect(dependency.importName == "Fixture")
-    #expect(dependency.dependencyName == .remote("https://github.com/example/Fixture.git"))
-    #expect(dependency.constraint == .upToNextMajor(Version(1, 2, 0)))
+    #expect(dependency.module == "Fixture")
+    #expect(dependency.source.location == "https://github.com/example/Fixture.git")
+    #expect(dependency.requirement == .upToNextMajor(Version(1, 2, 0)))
   }
 
   @Test func commentsAndStringsAreNotDeclarations() throws {
@@ -59,10 +59,10 @@ struct ScriptAnalysisTests {
         struct Program { static func main() {} }
         """))
     #expect(analysis.hasMainAttribute)
-    #expect(analysis.dependencies.map(\.importName) == ["Foo", "Bar"])
+    #expect(analysis.dependencies.map(\.module) == ["Foo", "Bar"])
     #expect(
-      analysis.dependencies[0].constraint == .exact(try Version(parsing: "1.2.3-alpha.1+build")))
-    #expect(analysis.dependencies[1].constraint == .revision("main"))
+      analysis.dependencies[0].requirement == .exact(try Version(parsing: "1.2.3-alpha.1+build")))
+    #expect(analysis.dependencies[1].requirement == .revision("main"))
   }
 
   @Test(arguments: [
@@ -73,10 +73,9 @@ struct ScriptAnalysisTests {
     ("git@example.com:fixture.git", "git@example.com:fixture.git"),
   ])
   func repositoryForms(_ comment: String, location: String) throws {
-    let dependency = try #require(
-      try ImportSpecification(module: "Fixture", comment: comment, source: source("")))
-    #expect(dependency.dependencyName.location == location)
-    #expect(dependency.constraint == .latest)
+    let dependency = try #require(try directive(comment))
+    #expect(dependency.source.location == location)
+    #expect(dependency.requirement == .unspecified)
   }
 
   @Test(arguments: [
@@ -85,12 +84,9 @@ struct ScriptAnalysisTests {
   ])
   func malformedDeclarations(_ comment: String) throws {
     if comment.isEmpty {
-      #expect(
-        try ImportSpecification(module: "Fixture", comment: comment, source: source("")) == nil)
+      #expect(try directive(comment) == nil)
     } else {
-      #expect(throws: SourceError.self) {
-        try ImportSpecification(module: "Fixture", comment: comment, source: source(""))
-      }
+      #expect(throws: SourceError.self) { try directive(comment) }
     }
   }
 
@@ -98,16 +94,14 @@ struct ScriptAnalysisTests {
     ("1", "1.0.0"), ("v1.2", "1.2.0"), ("0.2.3-alpha.1+build", "0.2.3-alpha.1+build"),
   ])
   func scriptVersionConveniences(_ operand: String, version: String) {
-    #expect(ImportSpecification.scriptVersion(operand)?.description == version)
+    #expect(Version(lenient: operand)?.description == version)
     #expect(Version("v1.2") == nil)
   }
 
   @Test(arguments: ["main", "abcdef", "01.2.3", "1.2.3-alpha.01"])
   func nonVersionsAreGitReferences(_ operand: String) throws {
-    let dependency = try #require(
-      try ImportSpecification(
-        module: "Fixture", comment: "@example == " + operand, source: source("")))
-    #expect(dependency.constraint == .revision(operand))
+    let dependency = try #require(try directive("@example == " + operand))
+    #expect(dependency.requirement == .revision(operand))
   }
 
   @Test func localPathsAndLiteralEscaping() throws {
@@ -115,18 +109,13 @@ struct ScriptAnalysisTests {
     let dependency = temporary.path.appending("local \"quoted\"")
     try FileManager.default.createDirectory(
       at: fileURL(dependency), withIntermediateDirectories: true)
-    let input = ScriptSource(
-      path: temporary.path.appending("script.swift"), name: "script", text: "",
-      dependencyDirectory: temporary.path)
     let parsed = try #require(
-      try ImportSpecification(module: "Fixture", comment: "./local \"quoted\"", source: input))
-    #expect(parsed.dependencyName == .local(dependency))
+      try directive("./local \"quoted\"", relativeTo: temporary.path))
+    #expect(parsed.source == .local(dependency))
     #expect(parsed.packageLine.contains("\\\"quoted\\\""))
     #expect(swiftLiteral("\\(value)\n\"quoted\"") == "\"\\\\(value)\\n\\\"quoted\\\"\"")
     let home = FileManager.default.homeDirectoryForCurrentUser.path
-    #expect(
-      try ImportSpecification(module: "Fixture", comment: "~/", source: input)?.dependencyName
-        == .local(FilePath(home)))
+    #expect(try directive("~/", relativeTo: temporary.path)?.source == .local(FilePath(home)))
   }
 
   @Test func shebangPreservesLinesAndLiteralContent() {
@@ -140,6 +129,19 @@ struct ScriptAnalysisTests {
     #expect(
       input.compilableText.utf8.filter { $0 == 10 }.count
         == input.text.utf8.filter { $0 == 10 }.count)
+  }
+}
+
+private func directive(
+  _ comment: String, relativeTo directory: FilePath = absolutePath(".")
+) throws -> DependencyDirective? {
+  try DependencyDirective(module: "Fixture", comment: comment, baseDirectory: directory)
+}
+
+extension DependencyDirective {
+  fileprivate var requirement: Requirement? {
+    guard case .remote(_, let requirement) = source else { return nil }
+    return requirement
   }
 }
 

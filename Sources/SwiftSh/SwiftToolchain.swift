@@ -10,7 +10,7 @@ struct SwiftToolchain: Sendable {
   let executable: FilePath
   let fingerprint: String
 
-  static func discover(cache: BuildCache) async throws -> SwiftToolchain {
+  static func discover(cache: ScriptCache) async throws -> SwiftToolchain {
     let resolvedExecutable = try await Executable.name("swift").resolveExecutablePath(in: .inherit)
     var executable = FilePath(resolvedExecutable.string)
     #if os(macOS)
@@ -40,7 +40,7 @@ struct SwiftToolchain: Sendable {
     let declaration = cache.root.appending("toolchains").appending(fingerprint + ".json")
     if let data = try? Data(contentsOf: fileURL(declaration)),
       let version = try? JSONDecoder().decode(String.self, from: data),
-      let parsed = ImportSpecification.scriptVersion(version), parsed >= Version(6, 3, 0)
+      let parsed = Version(lenient: version), parsed >= Version(6, 3, 0)
     {
       return SwiftToolchain(executable: executable, fingerprint: fingerprint)
     }
@@ -52,7 +52,7 @@ struct SwiftToolchain: Sendable {
     }
     let words = result.standardOutput.split(whereSeparator: \.isWhitespace)
     guard let index = words.firstIndex(of: "version"), index + 1 < words.count,
-      let version = ImportSpecification.scriptVersion(String(words[index + 1])),
+      let version = Version(lenient: String(words[index + 1])),
       version >= Version(6, 3, 0)
     else {
       throw ToolchainError.minimumVersion(result.standardOutput)
