@@ -5,15 +5,32 @@ import Foundation
 import SemVer
 import SystemPackage
 
+enum BuildConfiguration: String, Sendable {
+  case debug
+  case release
+}
+
 /// The generated SwiftPM package that builds one script.
 struct ScriptPackage {
   let analysis: ScriptAnalysis
   let cache: ScriptCache
+  var configuration = BuildConfiguration.release
 
   var directory: FilePath { cache.directory(for: analysis.source) }
   var entryName: String { analysis.hasMainAttribute ? "Root.swift" : "main.swift" }
   var entry: FilePath { directory.appending(entryName) }
-  var binary: FilePath { directory.appending(".build/debug").appending(analysis.source.name) }
+  var binary: FilePath {
+    directory.appending(".build").appending(configuration.rawValue).appending(analysis.source.name)
+  }
+
+  /// Release modules compile for testing only when the script needs `@testable` access.
+  var buildArguments: [String] {
+    var arguments = ["build", "--configuration", configuration.rawValue]
+    if configuration == .release && analysis.hasTestableImports {
+      arguments += ["-Xswiftc", "-enable-testing"]
+    }
+    return arguments
+  }
 
   /// The record of releases selected for versionless imports. Cleaning the cache selects again.
   var releaseRecord: FilePath { directory.appending(".release-selection.json") }
@@ -92,10 +109,9 @@ struct ScriptPackage {
 
   func build(using toolchain: SwiftToolchain) async throws {
     let manifest = try await write()
-    let receipt = directory.appending(".build-record.json")
-    let arguments = ["build"]
+    let receipt = directory.appending(".build-record-\(configuration.rawValue).json")
     let expected = BuildRecord(
-      arguments: arguments,
+      arguments: buildArguments,
       source: digest(analysis.source.compilableText), manifest: digest(manifest.rendered()),
       toolchain: toolchain.fingerprint, localDependencies: try localDependencyFingerprint())
     let previous = (try? Data(contentsOf: fileURL(receipt))).flatMap {
@@ -103,7 +119,7 @@ struct ScriptPackage {
     }
     guard previous != expected || !FileManager.default.isExecutableFile(atPath: binary.string)
     else { return }
-    try await toolchain.run(arguments, in: directory)
+    try await toolchain.run(buildArguments, in: directory)
     try JSONEncoder().encode(expected).write(to: fileURL(receipt), options: .atomic)
   }
 

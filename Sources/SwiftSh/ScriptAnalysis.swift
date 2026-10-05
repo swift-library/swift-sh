@@ -9,12 +9,19 @@ struct ScriptAnalysis {
   let source: ScriptSource
   let dependencies: [DependencyDirective]
   let hasMainAttribute: Bool
+  let hasTestableImports: Bool
 
   init(source: ScriptSource) throws {
     self.source = source
     let visitor = ScriptDeclarations()
     visitor.walk(Parser.parse(source: source.compilableText))
     hasMainAttribute = visitor.hasMainAttribute
+    hasTestableImports = visitor.imports.contains { declaration in
+      declaration.attributes.contains {
+        $0.as(AttributeSyntax.self)?.attributeName.as(IdentifierTypeSyntax.self)?.name.text
+          == "testable"
+      }
+    }
     dependencies = try visitor.imports.compactMap { declaration in
       guard let module = declaration.path.first?.name.text else { return nil }
       var trivia = declaration.trailingTrivia

@@ -12,9 +12,9 @@ struct SwiftSh: AsyncParsableCommand {
     commandName: "swift sh",
     abstract: "Run Swift scripts with SwiftPM dependencies.",
     usage: """
-      swift sh <script> [arguments...]
-      swift sh - [arguments...]
-      swift sh -- [arguments...]
+      swift sh [--debug] <script> [arguments...]
+      swift sh [--debug] - [arguments...]
+      swift sh [--debug] -- [arguments...]
       swift sh package <script> [--force] [--move]
       swift sh open <script> [--xcode]
       swift sh cache clean [<script>]
