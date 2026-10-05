@@ -6,7 +6,7 @@ import Foundation
 
 @main
 struct SwiftSh: AsyncParsableCommand {
-  static let version = "0.1.1"
+  static let version = "0.2.0"
 
   static let configuration = CommandConfiguration(
     commandName: "swift sh",
