@@ -23,7 +23,6 @@ struct PackageManifest: Equatable, Sendable {
     case upToNextMajor(from: Version)
     case exact(Version)
     case revision(String)
-    case range(Range<Version>)
   }
 
   struct Product: Equatable, Sendable {
@@ -96,9 +95,6 @@ extension PackageManifest.Requirement {
     case .upToNextMajor(let version): return "from: \(swiftLiteral(version.description))"
     case .exact(let version): return "exact: \(swiftLiteral(version.description))"
     case .revision(let reference): return "revision: \(swiftLiteral(reference))"
-    case .range(let range):
-      let lower = swiftLiteral(range.lowerBound.description)
-      return "\(lower)..<\(swiftLiteral(range.upperBound.description))"
     }
   }
 }

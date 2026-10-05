@@ -126,7 +126,31 @@ struct CommandIntegrationTests {
     #expect(try await fixture.invoke([script.string]).stdout == "2\n")
   }
 
-  @Test func generatedCopiesProtectUserSource() throws {
+  @Test func versionlessImportPinsNewestRelease() async throws {
+    let fixture = try await CommandFixture()
+    let library = try fixture.library()
+    let repository = try await GitRepository(at: library)
+    let source = library.appending("Sources/Fixture/Fixture.swift")
+    for (value, tag) in [(1, "1.0.0"), (2, "v1.1.0"), (3, "2.0.0-beta.1")] {
+      try "public func value() -> Int { \(value) }\n".write(
+        to: fileURL(source), atomically: true, encoding: .utf8)
+      try await repository.commitAll()
+      try await repository.tag(tag)
+    }
+    let script = try fixture.script("import Fixture // \(repository.url)\nprint(value())\n")
+    let first = try await fixture.invoke([script.string])
+    #expect(first.status == .exited(0), "\(first.stderr)")
+    #expect(first.stdout == "2\n")
+    try "public func value() -> Int { 4 }\n".write(
+      to: fileURL(source), atomically: true, encoding: .utf8)
+    try await repository.commitAll()
+    try await repository.tag("1.2.0")
+    #expect(try await fixture.invoke([script.string]).stdout == "2\n")
+    #expect(try await fixture.invoke(["cache", "clean", script.string]).status == .exited(0))
+    #expect(try await fixture.invoke([script.string]).stdout == "4\n")
+  }
+
+  @Test func generatedCopiesProtectUserSource() async throws {
     let temporary = try TemporaryDirectory()
     let path = temporary.path.appending("source.swift")
     let text = "print(1)\n"
@@ -139,7 +163,7 @@ struct CommandIntegrationTests {
       at: fileURL(script.directory), withIntermediateDirectories: true)
     try FileManager.default.createSymbolicLink(
       atPath: script.entry.string, withDestinationPath: path.string)
-    try script.write()
+    try await script.write()
     try "generated modification\n".write(
       to: fileURL(script.entry), atomically: true, encoding: .utf8)
     #expect(try String(contentsOf: fileURL(path), encoding: .utf8) == text)

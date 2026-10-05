@@ -23,7 +23,7 @@ struct OpenCommand: AsyncParsableCommand {
     let lock = try CacheLock(root: cache.root, key: cache.key(for: analysis.source))
     defer { lock.release() }
     let package = ScriptPackage(analysis: analysis, cache: cache)
-    try package.write()
+    try await package.write()
     let launch = try await EditorLaunch(
       for: package, xcode: xcode, environment: ProcessInfo.processInfo.environment)
     if let directory = launch.workingDirectory {
