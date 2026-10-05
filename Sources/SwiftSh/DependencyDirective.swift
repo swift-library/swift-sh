@@ -45,23 +45,22 @@ struct DependencyDirective: Equatable, Sendable {
     case unspecified
   }
 
-  var packageLine: String {
+  var manifestDependency: PackageManifest.Dependency {
     switch source {
-    case .local(let path): return ".package(path: \(swiftLiteral(path.string)))"
-    case .remote(let url, let requirement):
-      let argument: String
-      switch requirement {
-      case .upToNextMajor(let version): argument = "from: \(swiftLiteral(version.description))"
-      case .exact(let version): argument = "exact: \(swiftLiteral(version.description))"
-      case .revision(let reference): argument = "revision: \(swiftLiteral(reference))"
-      case .unspecified: argument = "\"0.0.0\"..<\"1000000.0.0\""
-      }
-      return ".package(url: \(swiftLiteral(url)), \(argument))"
+    case .local(let path): return .local(path: path.string)
+    case .remote(let url, .upToNextMajor(let version)):
+      return .remote(url: url, requirement: .upToNextMajor(from: version))
+    case .remote(let url, .exact(let version)):
+      return .remote(url: url, requirement: .exact(version))
+    case .remote(let url, .revision(let reference)):
+      return .remote(url: url, requirement: .revision(reference))
+    case .remote(let url, .unspecified):
+      return .remote(url: url, requirement: .range(Version(0, 0, 0)..<Version(1_000_000, 0, 0)))
     }
   }
 
-  var productLine: String {
-    ".product(name: \(swiftLiteral(module)), package: \(swiftLiteral(source.identity)))"
+  var manifestProduct: PackageManifest.Product {
+    PackageManifest.Product(name: module, package: source.identity)
   }
 
   /// Returns nil when the comment is prose rather than a dependency.

@@ -112,7 +112,10 @@ struct ScriptAnalysisTests {
     let parsed = try #require(
       try directive("./local \"quoted\"", relativeTo: temporary.path))
     #expect(parsed.source == .local(dependency))
-    #expect(parsed.packageLine.contains("\\\"quoted\\\""))
+    let manifest = PackageManifest(
+      name: "script", targetName: "Script", entryFile: "main.swift",
+      dependencies: [parsed.manifestDependency])
+    #expect(manifest.rendered().contains("local \\\"quoted\\\""))
     #expect(swiftLiteral("\\(value)\n\"quoted\"") == "\"\\\\(value)\\n\\\"quoted\\\"\"")
     let home = FileManager.default.homeDirectoryForCurrentUser.path
     #expect(try directive("~/", relativeTo: temporary.path)?.source == .local(FilePath(home)))

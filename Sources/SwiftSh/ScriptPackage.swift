@@ -14,37 +14,20 @@ struct ScriptPackage {
   var entry: FilePath { directory.appending(entryName) }
   var binary: FilePath { directory.appending(".build/debug").appending(analysis.source.name) }
 
-  var manifest: String {
-    let name = swiftLiteral(analysis.source.name)
-    let target = swiftLiteral("SwiftShScript_" + cache.key(for: analysis.source).prefix(16))
-    var seen: Set<String> = []
-    let dependencies = analysis.dependencies.map(\.packageLine).filter { seen.insert($0).inserted }
-      .joined(separator: ",\n    ")
-    let products = analysis.dependencies.map(\.productLine).joined(separator: ", ")
-    let version = ProcessInfo.processInfo.operatingSystemVersion
-    return """
-      // swift-tools-version:6.3
-      import PackageDescription
-
-      let package = Package(
-        name: \(name),
-        products: [.executable(name: \(name), targets: [\(target)])],
-        dependencies: [
-          \(dependencies)
-        ],
-        targets: [.executableTarget(
-          name: \(target),
-          dependencies: [\(products)],
-          path: ".",
-          sources: [\(swiftLiteral(entryName))]
-        )],
-        swiftLanguageModes: [.v6]
-      )
-      #if os(macOS)
-      package.platforms = [.macOS("\(version.majorVersion).\(version.minorVersion)")]
-      #endif
-
-      """
+  var manifest: PackageManifest {
+    #if os(macOS)
+      let version = ProcessInfo.processInfo.operatingSystemVersion
+      let deploymentTarget: String? = "\(version.majorVersion).\(version.minorVersion)"
+    #else
+      let deploymentTarget: String? = nil
+    #endif
+    return PackageManifest(
+      name: analysis.source.name,
+      targetName: "SwiftShScript_" + cache.key(for: analysis.source).prefix(16),
+      entryFile: entryName,
+      dependencies: analysis.dependencies.map(\.manifestDependency).uniqued(),
+      products: analysis.dependencies.map(\.manifestProduct).uniqued(),
+      macOSDeploymentTarget: deploymentTarget)
   }
 
   /// Generated files are owned copies; changes never write through a link to user source.
@@ -72,7 +55,7 @@ struct ScriptPackage {
       try manager.removeItem(at: fileURL(entry))
     }
     try writeIfChanged(analysis.source.compilableText, to: entry)
-    try writeIfChanged(manifest, to: directory.appending("Package.swift"))
+    try writeIfChanged(manifest.rendered(), to: directory.appending("Package.swift"))
   }
 
   func build(using toolchain: SwiftToolchain) async throws {
@@ -81,7 +64,7 @@ struct ScriptPackage {
     let arguments = ["build"]
     let expected = BuildRecord(
       arguments: arguments,
-      source: digest(analysis.source.compilableText), manifest: digest(manifest),
+      source: digest(analysis.source.compilableText), manifest: digest(manifest.rendered()),
       toolchain: toolchain.fingerprint, localDependencies: try localDependencyFingerprint())
     let previous = (try? Data(contentsOf: fileURL(receipt))).flatMap {
       try? JSONDecoder().decode(BuildRecord.self, from: $0)
@@ -129,4 +112,13 @@ private struct BuildRecord: Codable, Equatable {
 private func writeIfChanged(_ text: String, to path: FilePath) throws {
   guard (try? String(contentsOf: fileURL(path), encoding: .utf8)) != text else { return }
   try text.write(to: fileURL(path), atomically: true, encoding: .utf8)
+}
+
+extension Array where Element: Equatable {
+  /// The elements in their original order without later duplicates.
+  fileprivate func uniqued() -> [Element] {
+    reduce(into: []) { result, element in
+      if !result.contains(element) { result.append(element) }
+    }
+  }
 }
