@@ -13,21 +13,34 @@ import SystemPackage
 /// Generated script packages, keyed by script path or by standard input content.
 struct ScriptCache: Sendable {
   let root: FilePath
+  /// Locations written by earlier releases, removed when the whole cache is cleaned.
+  let legacyLocations: [FilePath]
 
-  init(root: FilePath? = nil) {
-    if let root {
-      self.root = root
-    } else if let parent = ProcessInfo.processInfo.environment["XDG_CACHE_HOME"] {
-      self.root = absolutePath(parent).appending("swift-sh")
-    } else {
-      #if os(macOS)
-        self.root = FilePath(FileManager.default.homeDirectoryForCurrentUser.path).appending(
-          "Library/Developer/swift-sh.cache")
-      #else
-        self.root = FilePath(FileManager.default.homeDirectoryForCurrentUser.path).appending(
-          ".cache/swift-sh")
-      #endif
+  init(root: FilePath, legacyLocations: [FilePath] = []) {
+    self.root = root
+    self.legacyLocations = legacyLocations
+  }
+
+  /// Uses `XDG_CACHE_HOME` when it holds an absolute path, and otherwise the platform cache
+  /// directory: `~/Library/Caches` on macOS and `~/.cache` elsewhere.
+  init(
+    environment: [String: String] = ProcessInfo.processInfo.environment,
+    home: FilePath = FilePath(FileManager.default.homeDirectoryForCurrentUser.path)
+  ) {
+    if let parent = environment["XDG_CACHE_HOME"], parent.hasPrefix("/") {
+      self.init(root: FilePath(parent).appending("swift-sh"))
+      return
     }
+    #if os(macOS)
+      self.init(
+        root: home.appending("Library/Caches/swift-sh"),
+        legacyLocations: [
+          home.appending("Library/Developer/swift-sh.cache"),
+          home.appending("Library/Developer/.swift-sh-locks"),
+        ])
+    #else
+      self.init(root: home.appending(".cache/swift-sh"))
+    #endif
   }
 
   func key(for source: ScriptSource) -> String {
@@ -43,8 +56,9 @@ struct ScriptCache: Sendable {
     let key = script.map { digest(fileURL($0).resolvingSymlinksInPath().path) }
     let lock = try CacheLock(root: root, key: key)
     defer { lock.release() }
-    let directory = key.map { root.appending($0) } ?? root
-    if FileManager.default.fileExists(atPath: directory.string) {
+    let directories = key.map { [root.appending($0)] } ?? [root] + legacyLocations
+    for directory in directories
+    where (try? FileManager.default.attributesOfItem(atPath: directory.string)) != nil {
       try FileManager.default.removeItem(at: fileURL(directory))
     }
   }
