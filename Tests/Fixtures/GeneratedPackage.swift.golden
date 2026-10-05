@@ -1,0 +1,30 @@
+// swift-tools-version:6.3
+import PackageDescription
+
+let package = Package(
+  name: "report 数据",
+  platforms: [.macOS("15.0")],
+  products: [
+    .executable(name: "report 数据", targets: ["SwiftShScript_0123456789abcdef"])
+  ],
+  dependencies: [
+    .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.8.2"),
+    .package(url: "git@example.com:team/markdown.git", exact: "2.0.0-beta.1+build.7"),
+    .package(url: "https://example.com/tools.git", revision: "main"),
+    .package(path: "/tmp/local package/数据 \\(value)"),
+  ],
+  targets: [
+    .executableTarget(
+      name: "SwiftShScript_0123456789abcdef",
+      dependencies: [
+        .product(name: "ArgumentParser", package: "swift-argument-parser"),
+        .product(name: "Markdown", package: "markdown"),
+        .product(name: "Tools", package: "tools"),
+        .product(name: "Local", package: "数据 \\(value)"),
+      ],
+      path: ".",
+      sources: ["Root.swift"]
+    )
+  ],
+  swiftLanguageModes: [.v6]
+)
