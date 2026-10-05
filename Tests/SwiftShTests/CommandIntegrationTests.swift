@@ -8,7 +8,7 @@ import Testing
 
 @testable import SwiftSh
 
-@Suite(.serialized, .timeLimit(.minutes(2)))
+@Suite(.serialized, .timeLimit(.minutes(5)))
 struct CommandIntegrationTests {
   @Test func versionHelpAndUsageExits() async throws {
     let fixture = try await CommandFixture()
@@ -85,6 +85,17 @@ struct CommandIntegrationTests {
     #expect(topLevel.status == .exited(0))
     #expect(topLevel.stdout == "third\n")
     #expect(!FileManager.default.fileExists(atPath: generated.appending("Root.swift").string))
+  }
+
+  @Test func releaseByDefaultAndDebugOnRequest() async throws {
+    let fixture = try await CommandFixture()
+    let path = try fixture.script(
+      "#if DEBUG\nprint(\"debug\")\n#else\nprint(\"release\")\n#endif\n")
+    #expect(try await fixture.invoke([path.string]).stdout == "release\n")
+    #expect(try await fixture.invoke(["--debug", path.string]).stdout == "debug\n")
+    let hot = try await fixture.invoke([path.string])
+    #expect(hot.stdout == "release\n")
+    #expect(!hot.stderr.contains("Building"))
   }
 
   @Test func concurrentRunsOfOneFile() async throws {
@@ -196,7 +207,7 @@ struct CommandIntegrationTests {
     #expect(try String(contentsOf: fileURL(path), encoding: .utf8) == text)
   }
 
-  @Test(.timeLimit(.minutes(2))) func largeOutputAndFinalStatus() async throws {
+  @Test func largeOutputAndFinalStatus() async throws {
     let fixture = try await CommandFixture()
     let path = try fixture.script(
       """

@@ -21,6 +21,9 @@ struct RunCommand: AsyncParsableCommand {
       """,
     shouldDisplay: false)
 
+  @Flag(help: "Build the script in debug configuration instead of release.")
+  var debug = false
+
   @Argument(
     parsing: .captureForPassthrough,
     help: "A script path, or - or -- for standard input, followed by the script's arguments.")
@@ -58,7 +61,8 @@ struct RunCommand: AsyncParsableCommand {
     let lock = try CacheLock(root: cache.root, key: cache.key(for: analysis.source))
     defer { lock.release() }
     let toolchain = try await SwiftToolchain.discover(cache: cache)
-    let package = ScriptPackage(analysis: analysis, cache: cache)
+    let package = ScriptPackage(
+      analysis: analysis, cache: cache, configuration: debug ? .debug : .release)
     try await package.build(using: toolchain)
     try replaceProcess(with: package.binary.string, arguments: arguments)
   }

@@ -62,6 +62,15 @@ struct CommandLineTests {
     #expect(streamedArguments.isEmpty)
   }
 
+  @Test func debugFlagPrecedesTheScript() throws {
+    let command = try run(["--debug", "hello.swift", "--debug"])
+    #expect(command.debug)
+    let (input, arguments) = try command.resolve(isTTY: true)
+    #expect(input == .file(absolutePath("hello.swift")))
+    #expect(arguments == ["--debug"])
+    #expect(try !run(["hello.swift", "--debug"]).debug)
+  }
+
   @Test(arguments: [["run", "package"], ["run", "--", "cache"]])
   func explicitRunReachesScriptsNamedLikeSubcommands(_ arguments: [String]) throws {
     let (input, forwarded) = try run(arguments).resolve(isTTY: true)
