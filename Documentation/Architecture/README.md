@@ -6,9 +6,8 @@ This directory holds current architecture truth for `swift-sh`.
 
 - [Runtime Architecture](RuntimeArchitecture.md): how the CLI parses inputs,
   generates cached SwiftPM packages, builds scripts, and executes binaries.
-
-- [Versioning and Release](VersioningAndRelease.md): support, maintenance, and
-  immutable release policy.
+- [Versioning and Release](VersioningAndRelease.md): version authority,
+  compatibility, support, and immutable release policy.
 
 ## Belongs Here
 

@@ -17,7 +17,8 @@ or Linux; macOS source builds require the SDK from Xcode 26 or newer.
 
 For a custom SwiftPM scratch directory, set `SWIFT_SH_TEST_BINARY` to its built
 swift-sh executable before running the integration tests. Tests use isolated
-script packages and caches and do not require remote fixture dependencies.
+script packages, caches, and local Git repositories, so they need `git` but no
+network access.
 
 ## Documentation Placement
 
@@ -25,7 +26,7 @@ script packages and caches and do not require remote fixture dependencies.
 - Public entry points and common user workflows belong in `README.md`.
 - Documentation navigation belongs in `Documentation/README.md`.
 - Current architecture truth belongs in `Documentation/Architecture/*`.
-- Command, import, and troubleshooting reference belongs in
+- Command, dependency comment, and troubleshooting reference belongs in
   `Documentation/Reference/*`.
 - GitHub-specific workflows and collaboration files belong in `.github/*`.
 - Target-level API documentation, when added, belongs beside the SwiftPM target

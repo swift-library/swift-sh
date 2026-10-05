@@ -6,7 +6,7 @@ This directory indexes repository-native documentation for `swift-sh`.
 
 - `Architecture/`: current architecture truth for the package and runtime
   behavior.
-- `Reference/`: command syntax, import specification syntax, and supporting
+- `Reference/`: command syntax, dependency comment syntax, and supporting
   reference material.
 
 Target-level API documentation belongs with the SwiftPM target it documents,

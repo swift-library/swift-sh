@@ -17,7 +17,7 @@ points.
   `Documentation/README.md` before editing.
 - For current architecture descriptions, read
   `Documentation/Architecture/README.md` and the relevant architecture files.
-- For detailed command or import syntax changes, update
+- For detailed command or dependency comment syntax changes, update
   `Documentation/Reference/*` and keep the root `README.md` concise.
 - For GitHub-facing collaboration files, use `.github/` and root governance
   files.
@@ -41,8 +41,8 @@ points.
   automation.
 - If a value changes by input or environment, pass it in, configure it, derive
   it, or link to the owning artifact.
-- Keep detailed command/import syntax in `Documentation/Reference/*` rather
-  than expanding this guide.
+- Keep detailed command and dependency comment syntax in
+  `Documentation/Reference/*` rather than expanding this guide.
 
 ## Operating Notes
 

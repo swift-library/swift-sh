@@ -34,11 +34,13 @@ and runs it with your arguments. The script stays one file with no
 `PATH` as the `swift sh` subcommand.
 
 - Dependency comments for GitHub repositories, Git URLs, and local packages,
-  with `~>` and `==` version constraints.
+  with `~>` and `==` version constraints. An import without a constraint
+  builds against the newest release, selected once and kept.
 - Imports read with SwiftParser, so comments and string literals never add
   dependencies. Compiler errors keep the script's own line numbers.
-- Cached builds that rebuild only when the script, its local dependencies, or
-  the Swift toolchain change.
+- Optimized builds, cached until the script, the contents of its local
+  dependencies, or the Swift toolchain change. `--debug` builds a debug
+  binary instead.
 - Scripts from a file, standard input, or a named pipe, with arguments,
   standard streams, working directory, and exit status preserved.
 - `swift sh package` to turn a script into a standalone SwiftPM package, and
@@ -58,7 +60,7 @@ must be on `PATH`. On macOS, select Xcode 26 or later with `xcode-select`.
 To build from source instead:
 
 ```bash
-git clone --branch v0.1.1 https://github.com/swift-library/swift-sh.git
+git clone --branch v0.2.0 https://github.com/swift-library/swift-sh.git
 cd swift-sh
 swift build -c release --force-resolved-versions
 ```
@@ -97,8 +99,8 @@ chmod +x greet.swift
 ```
 
 The script prints `Hello, Swift!` twice. The first run resolves Swift Argument
-Parser and builds the script, so it takes longer; later runs reuse the cached
-build. SwiftPM build output goes to standard error, so standard output carries
+Parser and builds the script with optimization, so it takes longer; later runs
+reuse the cached build. SwiftPM build output goes to standard error, so standard output carries
 only what the script prints.
 
 The shebang runs `/usr/bin/swift`. If Swift is installed somewhere else, or
@@ -120,15 +122,15 @@ resolves transitive dependencies.
 import ExampleKit      // @example
 import ArgumentParser  // apple/swift-argument-parser ~> 1.8
 import Markdown        // swiftlang/swift-markdown == 0.8.0
-import TaDa            // git@github.com:example/tada.git ~> 1
-import Foo             // ./my/project
+import Charts          // git@github.com:example/charts.git ~> 2
+import Parsing         // ./Packages/Parsing
 ```
 
 - `@owner` points to the GitHub repository with the same name as the module,
   so `@example` above means `https://github.com/example/ExampleKit.git`.
 - `owner/repository` names a GitHub repository whose name differs from the
   module.
-- HTTPS, SSH, and SCP-style Git URLs are used as written.
+- HTTPS, SSH, SCP-style, and `file://` Git URLs are used as written.
 - A path that starts with `/`, `./`, `../`, or `~/` is a local package. Relative
   paths resolve beside the script, or against the current directory for
   standard input and named pipes.
@@ -145,18 +147,25 @@ the minor or patch number, use a `v` prefix, and include prerelease
 identifiers; prereleases are only used when you name one. A value that is not
 a version, such as `== b4de8c12`, is a Git revision.
 
-Without a constraint, swift-sh accepts any released version, so a fresh build
-can pick up a newer release. Use explicit constraints for scripts that need
-repeatable builds.
+Without a constraint, the first build selects the newest release tag of the
+repository, ignoring prereleases, and depends on it like `~>`. swift-sh records
+that choice with the cached build, so the script keeps the same release, with
+no network lookup, until `swift sh cache clean` selects again. A repository
+with no release tags needs an explicit constraint.
 
 ### Run scripts
 
 ```bash
 swift sh greet.swift Swift          # run a file
 swift sh - Swift < greet.swift      # read the script from standard input
+swift sh --debug greet.swift Swift  # build and run a debug binary
+swift sh run package                # run a script named like a subcommand
 ```
 
 Arguments after the script path, `-`, or `--` go to the script unchanged.
+Scripts build in release configuration; `--debug`, given before the script,
+builds a debug binary for faster compiles and debugger support. Each
+configuration keeps its own cached build.
 Scripts can use top-level code or an `@main` entry point. A script that runs
 replaces the swift-sh process and keeps its own exit status. Otherwise
 swift-sh exits with 0 for help and version, 2 for a command or build failure,
@@ -189,16 +198,18 @@ swift sh cache clean              # remove every cached build
 swift sh cache clean greet.swift  # remove one script's build
 ```
 
-Builds are cached in `~/Library/Developer/swift-sh.cache` on macOS and
-`~/.cache/swift-sh` on Linux. Set `XDG_CACHE_HOME` to use
-`$XDG_CACHE_HOME/swift-sh` instead.
+Builds are cached in `~/Library/Caches/swift-sh` on macOS and
+`~/.cache/swift-sh` on Linux. Set `XDG_CACHE_HOME` to an absolute path to use
+`$XDG_CACHE_HOME/swift-sh` instead. Cleaning the whole cache also removes
+`~/Library/Developer/swift-sh.cache`, where releases before 0.2.0 kept builds.
 
 ### Commands
 
 ```bash
-swift sh <script> [arguments]
-swift sh - [arguments]
-swift sh -- [arguments]
+swift sh [--debug] <script> [arguments]
+swift sh [--debug] - [arguments]
+swift sh [--debug] -- [arguments]
+swift sh run [--debug] <script> [arguments]
 swift sh package <script> [--force] [--move]
 swift sh open <script> [--xcode]
 swift sh cache clean [<script>]
@@ -215,8 +226,8 @@ help for one command.
 - On macOS, building swift-sh requires the macOS SDK from Xcode 26 or later
 
 Each release supports the three most recent major macOS versions, currently
-macOS 15, 26, and 27. CI tests macOS 15 and 26, and Linux with Swift 6.3 on
-Ubuntu 22.04. The
+macOS 15, 26, and 27. CI tests macOS 15 and 26, and Linux with the Swift 6.3.3
+Ubuntu 22.04 container on Ubuntu 24.04 runners. The
 [versioning and release policy](Documentation/Architecture/VersioningAndRelease.md)
 describes compatibility and maintenance.
 
@@ -224,7 +235,7 @@ describes compatibility and maintenance.
 
 - [Command reference](Documentation/Reference/Commands.md): input handling,
   packaging, editing, the cache, path rules, and exit codes.
-- [Import specifications](Documentation/Reference/ImportSpecifications.md):
+- [Dependency comments](Documentation/Reference/DependencyComments.md):
   every repository form, version constraint, and conditional compilation rule.
 - [Runtime architecture](Documentation/Architecture/RuntimeArchitecture.md):
   script analysis, generated packages, caching, and execution.
