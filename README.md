@@ -12,7 +12,7 @@
   <a href="https://github.com/swift-library/swift-sh/actions/workflows/ci.yml"><img src="https://github.com/swift-library/swift-sh/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI"></a>
   <img src="https://img.shields.io/badge/Swift-6.3%2B-F05138" alt="Swift 6.3+">
   <img src="https://img.shields.io/badge/platforms-macOS%2015%2B%20%7C%20Linux-lightgrey" alt="Platforms: macOS 15+ | Linux">
-  <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-Unlicense-blue" alt="License: Unlicense"></a>
+  <a href="LICENSE.txt"><img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License: Apache 2.0"></a>
 </p>
 
 [Overview](#overview) · [Install](#install) · [Quick start](#quick-start) ·
@@ -241,6 +241,7 @@ private route in [SECURITY.md](SECURITY.md).
 
 ## License
 
-swift-sh is released under the Unlicense. See [LICENSE.md](LICENSE.md) and
-[NOTICE](NOTICE), which also lists the licenses of the dependencies built into
-the executable.
+swift-sh is available under the Apache License 2.0 with the Swift Runtime
+Library Exception. See [LICENSE.txt](LICENSE.txt) and [NOTICE](NOTICE), which
+also lists the licenses of the dependencies built into the executable.
+Releases 0.1.0 and 0.1.1 were published under the Unlicense.

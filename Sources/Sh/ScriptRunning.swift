@@ -1,4 +1,5 @@
-// SPDX-License-Identifier: Unlicense
+// SPDX-License-Identifier: Apache-2.0 WITH Swift-exception
+// Copyright (c) 2026 Xudong Xu
 
 func run(_ input: Mode.RunType, arguments: [String]) async throws -> Never {
   let analysis = try ScriptAnalysis(source: ScriptSource(reading: input))
