@@ -26,26 +26,18 @@ struct DependencyDirective: Equatable, Sendable {
       let basename = location.split(separator: "/").last.map(String.init) ?? location
       return (basename.hasSuffix(".git") ? String(basename.dropLast(4)) : basename).lowercased()
     }
-
-    var addDependencyArguments: [String] {
-      switch self {
-      case .local: return ["--type", "path"]
-      case .remote(_, .upToNextMajor(let version)): return ["--from", version.description]
-      case .remote(_, .exact(let version)): return ["--exact", version.description]
-      case .remote(_, .revision(let reference)): return ["--revision", reference]
-      case .remote(_, .unspecified): return ["--from", "0.0.0", "--to", "1000000.0.0"]
-      }
-    }
   }
 
   enum Requirement: Equatable, Sendable {
     case upToNextMajor(Version)
     case exact(Version)
     case revision(String)
+    /// Builds against the newest release, selected when the script is first built.
     case unspecified
   }
 
-  var manifestDependency: PackageManifest.Dependency {
+  /// `releases` maps the URLs of versionless imports to their selected releases.
+  func manifestDependency(releases: [String: Version]) throws -> PackageManifest.Dependency {
     switch source {
     case .local(let path): return .local(path: path.string)
     case .remote(let url, .upToNextMajor(let version)):
@@ -55,7 +47,8 @@ struct DependencyDirective: Equatable, Sendable {
     case .remote(let url, .revision(let reference)):
       return .remote(url: url, requirement: .revision(reference))
     case .remote(let url, .unspecified):
-      return .remote(url: url, requirement: .range(Version(0, 0, 0)..<Version(1_000_000, 0, 0)))
+      guard let release = releases[url] else { throw ReleaseSelectionError.unselected(url) }
+      return .remote(url: url, requirement: .upToNextMajor(from: release))
     }
   }
 
@@ -104,7 +97,7 @@ struct DependencyDirective: Equatable, Sendable {
     source = .remote(url: try Self.url(for: repository, module: module), requirement: requirement)
   }
 
-  /// Expands `owner/repo` and `@owner` shorthands to GitHub URLs; full Git URLs pass through.
+  /// Expands `owner/repo` and `@owner` shorthands to GitHub URLs; Git URLs pass through.
   private static func url(for repository: String, module: String) throws -> String {
     guard !repository.contains(where: \.isWhitespace) else {
       throw SourceError.invalidDependency(repository)
@@ -112,10 +105,9 @@ struct DependencyDirective: Equatable, Sendable {
     if repository.hasPrefix("git@"), repository.contains(":") {
       return repository
     }
-    if let url = URL(string: repository), let scheme = url.scheme,
-      ["https", "http", "ssh"].contains(scheme), url.host != nil
-    {
-      return repository
+    if let url = URL(string: repository), let scheme = url.scheme {
+      if ["https", "http", "ssh"].contains(scheme), url.host != nil { return repository }
+      if scheme == "file", url.path.hasPrefix("/") { return repository }
     }
     let parts =
       repository.hasPrefix("@")

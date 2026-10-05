@@ -71,6 +71,7 @@ struct ScriptAnalysisTests {
     ("https://example.com/fixture.git", "https://example.com/fixture.git"),
     ("ssh://git@example.com/fixture.git", "ssh://git@example.com/fixture.git"),
     ("git@example.com:fixture.git", "git@example.com:fixture.git"),
+    ("file:///srv/git/fixture.git", "file:///srv/git/fixture.git"),
   ])
   func repositoryForms(_ comment: String, location: String) throws {
     let dependency = try #require(try directive(comment))
@@ -114,7 +115,7 @@ struct ScriptAnalysisTests {
     #expect(parsed.source == .local(dependency))
     let manifest = PackageManifest(
       name: "script", targetName: "Script", entryFile: "main.swift",
-      dependencies: [parsed.manifestDependency])
+      dependencies: [try parsed.manifestDependency(releases: [:])])
     #expect(manifest.rendered().contains("local \\\"quoted\\\""))
     #expect(swiftLiteral("\\(value)\n\"quoted\"") == "\"\\\\(value)\\n\\\"quoted\\\"\"")
     let home = FileManager.default.homeDirectoryForCurrentUser.path

@@ -55,7 +55,7 @@ struct PackageCommand: AsyncParsableCommand {
       if added.insert(directive.source.location).inserted {
         try await toolchain.run(
           ["package", "add-dependency", directive.source.location]
-            + directive.source.addDependencyArguments,
+            + (try await Self.requirementArguments(for: directive.source)),
           in: temporary.path)
       }
       try await toolchain.run(
@@ -78,6 +78,19 @@ struct PackageCommand: AsyncParsableCommand {
       try FileManager.default.moveItem(at: fileURL(temporary.path), to: fileURL(destination))
     }
     print("created: \(destination)")
+  }
+
+  /// A versionless import gets the newest release as its lower bound.
+  static func requirementArguments(for source: DependencyDirective.Source) async throws -> [String]
+  {
+    switch source {
+    case .local: return ["--type", "path"]
+    case .remote(_, .upToNextMajor(let version)): return ["--from", version.description]
+    case .remote(_, .exact(let version)): return ["--exact", version.description]
+    case .remote(_, .revision(let reference)): return ["--revision", reference]
+    case .remote(let url, .unspecified):
+      return ["--from", try await ReleaseSelection.newestRelease(at: url).description]
+    }
   }
 }
 

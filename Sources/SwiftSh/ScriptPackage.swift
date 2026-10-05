@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Xudong Xu
 
 import Foundation
+import SemVer
 import SystemPackage
 
 /// The generated SwiftPM package that builds one script.
@@ -14,7 +15,34 @@ struct ScriptPackage {
   var entry: FilePath { directory.appending(entryName) }
   var binary: FilePath { directory.appending(".build/debug").appending(analysis.source.name) }
 
-  var manifest: PackageManifest {
+  /// The record of releases selected for versionless imports. Cleaning the cache selects again.
+  var releaseRecord: FilePath { directory.appending(".release-selection.json") }
+
+  /// Returns the recorded release for each versionless import, selecting missing ones once.
+  func selectReleases() async throws -> [String: Version] {
+    var releases =
+      (try? Data(contentsOf: fileURL(releaseRecord))).flatMap {
+        try? JSONDecoder().decode([String: Version].self, from: $0)
+      } ?? [:]
+    var selected = false
+    for directive in analysis.dependencies {
+      guard case .remote(let url, .unspecified) = directive.source, releases[url] == nil else {
+        continue
+      }
+      releases[url] = try await ReleaseSelection.newestRelease(at: url)
+      selected = true
+    }
+    if selected {
+      try FileManager.default.createDirectory(
+        at: fileURL(directory), withIntermediateDirectories: true)
+      let encoder = JSONEncoder()
+      encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+      try encoder.encode(releases).write(to: fileURL(releaseRecord), options: .atomic)
+    }
+    return releases
+  }
+
+  func manifest(releases: [String: Version]) throws -> PackageManifest {
     #if os(macOS)
       let version = ProcessInfo.processInfo.operatingSystemVersion
       let deploymentTarget: String? = "\(version.majorVersion).\(version.minorVersion)"
@@ -25,13 +53,15 @@ struct ScriptPackage {
       name: analysis.source.name,
       targetName: "SwiftShScript_" + cache.key(for: analysis.source).prefix(16),
       entryFile: entryName,
-      dependencies: analysis.dependencies.map(\.manifestDependency).uniqued(),
+      dependencies: try analysis.dependencies.map { try $0.manifestDependency(releases: releases) }
+        .uniqued(),
       products: analysis.dependencies.map(\.manifestProduct).uniqued(),
       macOSDeploymentTarget: deploymentTarget)
   }
 
   /// Generated files are owned copies; changes never write through a link to user source.
-  func write() throws {
+  @discardableResult
+  func write() async throws -> PackageManifest {
     let buildPaths =
       [directory.string, analysis.source.name]
       + analysis.dependencies.compactMap { directive -> String? in
@@ -54,12 +84,14 @@ struct ScriptPackage {
     {
       try manager.removeItem(at: fileURL(entry))
     }
+    let manifest = try manifest(releases: try await selectReleases())
     try writeIfChanged(analysis.source.compilableText, to: entry)
     try writeIfChanged(manifest.rendered(), to: directory.appending("Package.swift"))
+    return manifest
   }
 
   func build(using toolchain: SwiftToolchain) async throws {
-    try write()
+    let manifest = try await write()
     let receipt = directory.appending(".build-record.json")
     let arguments = ["build"]
     let expected = BuildRecord(

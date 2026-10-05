@@ -43,23 +43,36 @@ struct PackageManifestTests {
   }
 
   @Test func directivesBecomeUniqueManifestEntries() throws {
-    let source = ScriptSource(
-      path: nil, name: "Script",
-      text: """
-        import Fixture // @example ~> 1.2
-        import Fixture // @example ~> 1.2
-        import Other // example/Fixture ~> 1.2
-        """,
-      dependencyDirectory: absolutePath("."))
-    let package = ScriptPackage(
-      analysis: try ScriptAnalysis(source: source), cache: ScriptCache(root: absolutePath("cache")))
+    let package = try scriptPackage(
+      """
+      import Fixture // @example ~> 1.2
+      import Fixture // @example ~> 1.2
+      import Other // example/Fixture ~> 1.2
+      import Tools // example/tools
+      """)
+    let manifest = try package.manifest(releases: [
+      "https://github.com/example/tools.git": Version(1, 4, 0)
+    ])
     #expect(
-      package.manifest.dependencies == [
+      manifest.dependencies == [
         .remote(
           url: "https://github.com/example/Fixture.git",
-          requirement: .upToNextMajor(from: Version(1, 2, 0)))
+          requirement: .upToNextMajor(from: Version(1, 2, 0))),
+        .remote(
+          url: "https://github.com/example/tools.git",
+          requirement: .upToNextMajor(from: Version(1, 4, 0))),
       ])
-    #expect(package.manifest.products.map(\.name) == ["Fixture", "Other"])
+    #expect(manifest.products.map(\.name) == ["Fixture", "Other", "Tools"])
+    #expect(throws: ReleaseSelectionError.unselected("https://github.com/example/tools.git")) {
+      try package.manifest(releases: [:])
+    }
+  }
+
+  private func scriptPackage(_ text: String) throws -> ScriptPackage {
+    let source = ScriptSource(
+      path: nil, name: "Script", text: text, dependencyDirectory: absolutePath("."))
+    return ScriptPackage(
+      analysis: try ScriptAnalysis(source: source), cache: ScriptCache(root: absolutePath("cache")))
   }
 }
 
