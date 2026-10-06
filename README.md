@@ -35,7 +35,7 @@ and runs it with your arguments. The script stays one file with no
 
 - Dependency comments for GitHub repositories, Git URLs, and local packages,
   with `~>` and `==` version constraints. An import without a constraint
-  builds against the newest release, selected once and kept.
+  selects the newest release as its lower bound and caches that selection.
 - Imports read with SwiftParser, so comments and string literals never add
   dependencies. Compiler errors keep the script's own line numbers.
 - Optimized builds, cached until the script, the contents of its local
@@ -149,9 +149,11 @@ a version, such as `== b4de8c12`, is a Git revision.
 
 Without a constraint, the first build selects the newest release tag of the
 repository, ignoring prereleases, and depends on it like `~>`. swift-sh records
-that choice with the cached build, so the script keeps the same release, with
-no network lookup, until `swift sh cache clean` selects again. A repository
-with no release tags needs an explicit constraint.
+that lower bound with the cached build and reuses it without another tag
+lookup. SwiftPM can resolve a later compatible version when the dependency
+graph changes. `swift sh cache clean` discards the selection; the next build
+selects again. Use `==` for an exact version. A repository with no release tags
+needs an explicit constraint.
 
 ### Run scripts
 

@@ -68,7 +68,9 @@ repository's tags with `git ls-remote --tags --refs`, with terminal prompts
 disabled, and chooses the newest semantic version tag that is not a
 prerelease. `ScriptPackage` stores the selections in `.release-selection.json`
 beside the generated package and renders them as `from:` requirements. Stored
-selections are reused without network access until the cache entry is removed.
+selections are reused without another tag lookup until the cache entry is
+removed. They define lower bounds; SwiftPM owns the resolved versions and may
+choose a later compatible release when the dependency graph changes.
 
 `ScriptCache` uses SHA-256 identities. File inputs key by their resolved path;
 stream inputs key by source contents, input kind, and dependency directory.
