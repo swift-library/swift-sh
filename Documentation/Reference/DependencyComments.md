@@ -102,16 +102,16 @@ with SwiftPM's `from:` requirement, so it accepts later releases up to the next
 major version, like `~>`.
 
 swift-sh records the selected release beside the cached build. Later runs use
-the record without a network request, so the script keeps building against the
-same release. `swift sh cache clean`, for the script or the whole cache, discards
+the selected lower bound without another tag lookup. SwiftPM may resolve a
+later compatible release when the dependency graph changes. `swift sh cache clean`, for the script or the whole cache, discards
 the record, and the next build selects again. A repository without release tags
 fails with a request to add a constraint, such as `== main` or `~> 1.0`.
 
 `swift sh package` selects the newest release the same way and passes it to
 SwiftPM as the dependency's lower bound.
 
-Use an explicit `~>` or `==` constraint when a script must build against the
-same versions everywhere.
+Use `~>` to declare a compatible version range, or `==` to require an exact
+version across builds.
 
 ## Pre-release Versions
 
