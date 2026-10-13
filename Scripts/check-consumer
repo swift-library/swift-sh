@@ -7,6 +7,7 @@
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -31,7 +32,8 @@ with tempfile.TemporaryDirectory(prefix="swift-sh-consumer-") as directory:
         subprocess.run(["swift", "build", "--package-path", str(package), "-c", "release", "--force-resolved-versions"], check=True)
     binary_directory = subprocess.check_output(["swift", "build", "--package-path", str(package), "-c", "release", "--show-bin-path"], text=True).strip()
     binary = Path(binary_directory) / "swift-sh"
-    expected = subprocess.check_output([str(package / "Scripts/validate-version")], text=True).strip()
+    config = json.loads((package / ".github/release.json").read_text())
+    expected = re.search(config["version_pattern"], (package / config["version_file"]).read_text())[1]
     for arguments, status in [(["--version"], 0), (["--help"], 0), (["package", "--unknown"], 3), (["--version", "extra"], 3)]:
         result = subprocess.run([str(binary), *arguments], input="", text=True, capture_output=True, timeout=20)
         if result.returncode != status:

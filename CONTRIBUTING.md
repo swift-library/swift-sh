@@ -1,6 +1,8 @@
 # Contributing
 
-Keep changes small, role-aware, and verified with SwiftPM.
+External contributions are welcome. Use a Conventional Commit PR title and
+verify changes with SwiftPM. Maintainers follow the shared
+[signing instructions](https://github.com/swift-library/.github/blob/master/MAINTENANCE.md#signing).
 
 ## Build And Test
 
@@ -10,7 +12,7 @@ Run the repository checks from the root:
 Scripts/check
 ```
 
-This validates strict formatting, release metadata, Swift tests, a Release
+This validates strict formatting, Swift tests, a Release
 build, and an independent script consumer. CI validates the minimum supported
 Swift toolchain with its matching SDK. The package requires Swift 6.3, macOS 15
 or Linux; macOS source builds require the SDK from Xcode 26 or newer.
