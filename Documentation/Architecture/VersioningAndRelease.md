@@ -1,45 +1,27 @@
 # Versioning and Release
 
-swift-sh adopts the
-[swift-library versioning standard](https://github.com/swift-library/.github/blob/master/VERSIONING.md).
-This document records how the package applies it.
+swift-sh follows the [shared release standard](https://github.com/swift-library/.github/blob/master/VERSIONING.md).
+`SwiftSh.version` in `Sources/SwiftSh/SwiftSh.swift` declares the runtime version.
+`CHANGELOG.md` records release notes, and `.github/release.json` selects validation.
 
-## Version Authority
+## Compatibility surface
 
-`SwiftSh.version` in `Sources/SwiftSh/SwiftSh.swift` owns the runtime version.
-`CHANGELOG.md` owns the matching release notes, and `.github/release.json`
-identifies both for `Scripts/validate-version`. A release tag is `vVERSION` and
-identifies one clean commit with a matching, nonempty Changelog entry.
-Published tags are immutable; source fixes after tagging use a new version. The
-default branch is `master`.
-
-During 0.x, fixes and compatible additions increment PATCH, and incompatible
-changes increment MINOR with an upgrade note in the Changelog. From 1.0.0,
-compatible additions increment MINOR and incompatible changes increment MAJOR.
 Compatibility covers command syntax, exit statuses, dependency comment
 semantics, cache location, the default build configuration, and compiler and
-system requirements. Documentation and CI changes alone do not require a
-release.
+system requirements.
 
-## Supported Environments
+## Requirements and validation
 
-Swift compiler support follows implementation and dependency requirements.
-System support is reviewed manually at release time against the organization's
-three-generation window. Raising a system minimum is a compatibility change
-and is recorded in release notes. Current requirements are Swift 6.3, macOS 15,
-and Linux with a supported Swift toolchain.
+The package requires Swift 6.3, macOS 15 or Linux with a supported toolchain.
+The maintained macOS window is 15/26/27. CI tests macOS 15 and 26 and Linux
+with the digest-pinned Swift 6.3.3 Ubuntu image. Strict formatting runs separately.
+Local acceptance also covers native macOS 27.
 
-The newest release line receives maintenance; older-line backports are decided
-as needed. Dependabot proposes weekly Swift dependency and Actions updates.
-Updates pass compatibility CI before merging. Actions and shared workflows are
-pinned to complete commit SHAs.
+`Scripts/check` runs formatting, Swift tests, a release build and an independent
+script consumer. `Scripts/check-consumer` accepts a remote repository and a
+revision or version to verify fresh CLI installation. It checks version/help,
+argument errors and a script using a remote SemVer dependency.
+Evidence belongs in `.build/release-validation`.
 
-## Release Acceptance
-
-Read-only CI validates strict formatting, Swift Testing, the Release build,
-version consistency, and an independent script consumer. The release workflow
-repeats checks on a tag before a separate job receives publishing permission.
-Release evidence records the commit, tree, dependency lock, toolchain, system,
-validation commands, and logs. Local acceptance covers macOS 27 and remote
-candidate and tagged installation. Homebrew distribution is owned by the
-organization tap and follows published GitHub Releases.
+Homebrew distribution is owned by the organization tap and follows published
+GitHub Releases. Repository-specific security reporting is in `SECURITY.md`.
