@@ -4,6 +4,9 @@ This directory indexes repository-native documentation for `swift-sh`.
 
 ## Areas
 
+- [Terminal demonstration](Reference/TerminalDemo.md): recorded README example,
+  shared design pin, and generated light/dark assets.
+
 - `Architecture/`: current architecture truth for the package and runtime
   behavior.
 - `Reference/`: command syntax, dependency comment syntax, and supporting

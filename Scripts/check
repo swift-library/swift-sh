@@ -10,9 +10,10 @@ case "${1:-all}" in
   *) echo 'Usage: Scripts/check [--format-check|--compiler-check]' >&2; exit 2 ;;
 esac
 mkdir -p .build/release-validation
+Scripts/check-demo
 if [ "$RELEASE_CHECK_SCOPE" = all ] || [ "$RELEASE_CHECK_SCOPE" = format ]; then
   xcrun swift-format lint --strict --configuration .swift-format --recursive Package.swift Sources Tests
-  xcrun swift-format lint --strict --configuration .swift-format Examples/markdown Examples/terminal-rainbow Examples/async-main-count-lines
+  xcrun swift-format lint --strict --configuration .swift-format Examples/markdown Examples/terminal-rainbow Examples/async-main-count-lines Examples/version.swift
 fi
 if [ "$RELEASE_CHECK_SCOPE" = all ] || [ "$RELEASE_CHECK_SCOPE" = compiler ]; then
   swift test --force-resolved-versions
