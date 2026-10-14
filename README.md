@@ -36,7 +36,7 @@ Keep a script in one file, with no `Package.swift` to maintain. A trailing impor
 
 ## Quick look
 
-An import comment supplies SemVer; the script increments the version you pass.
+Increment a version with SemVer:
 
 <p align="center">
   <picture>
