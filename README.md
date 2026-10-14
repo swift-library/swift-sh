@@ -32,12 +32,11 @@
 
 ## Overview
 
-Run a single Swift file with its package dependencies declared inline. A trailing import comment names a dependency; `swift sh` builds the generated package in a cache and forwards your arguments. See [dependency comments](Documentation/Reference/DependencyComments.md) and the [command reference](Documentation/Reference/Commands.md) for syntax and execution rules.
+Keep a script in one file, with no `Package.swift` to maintain. A trailing import comment names a dependency; `swift sh` builds the generated package in a cache and forwards your arguments. See [dependency comments](Documentation/Reference/DependencyComments.md) and the [command reference](Documentation/Reference/Commands.md) for syntax and execution rules.
 
 ## Quick look
 
-The [recorded script](Examples/version.swift) declares its SemVer dependency
-on the import line, then prints the next minor version for each argument.
+An import comment supplies SemVer; the script increments the version you pass.
 
 <p align="center">
   <picture>
@@ -46,8 +45,6 @@ on the import line, then prints the next minor version for each argument.
     <img src="Documentation/Assets/Demo-light.svg" alt="Recorded terminal: cat version.swift shows the inline SemVer dependency; swift sh version.swift 1.2.3 prints 1.3.0, and a second run with 2.4.0 prints 2.5.0.">
   </picture>
 </p>
-
-See [the recording and reproduction steps](Documentation/Reference/TerminalDemo.md).
 
 ## Install
 
@@ -100,7 +97,6 @@ describes compatibility and maintenance.
 
 ## Documentation
 
-- [Recorded terminal demonstration](Documentation/Reference/TerminalDemo.md)
 - [Command reference](Documentation/Reference/Commands.md): input handling,
   packaging, editing, the cache, path rules, and exit codes.
 - [Dependency comments](Documentation/Reference/DependencyComments.md):

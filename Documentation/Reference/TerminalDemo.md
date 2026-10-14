@@ -14,8 +14,9 @@ python3 Scripts/record-demo.py
 ```
 
 The recorder uses `.build/demo-session` and `.build/demo-cache`, and writes
-the committed `Documentation/Assets/Demo-record.json`. Its local provenance
-record includes compiler and executable identities; raw standard error stays
+the committed `Documentation/Assets/Demo-record.json` and
+`Documentation/Assets/Demo-provenance.json`. The provenance includes compiler
+and executable identities; raw standard error stays
 under `.build/demo-session`.
 
 The full commit in `.github/presentation.json` pins the shared terminal renderer

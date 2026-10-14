@@ -43,5 +43,5 @@ provenance = {
     "dependency": "https://github.com/swift-library/swift-semver.git @ 0.1.1",
     "command_exit_codes": [item["exit_code"] for item in commands],
 }
-(session / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
+(root / "Documentation/Assets/Demo-provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
 print("Recorded example and two script runs")
