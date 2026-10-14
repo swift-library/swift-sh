@@ -1,0 +1,13 @@
+{
+  "source_revision": "3035a02639ca99af57d302358425efdf3d57d50d",
+  "executable_sha256": "eff60d22ff48cff9757611283ae296c012fb132a3c338792cc76b6f458ce2688",
+  "example_sha256": "be040180d48a86fbb83c4645d78e6eedfb4bf0a058b09c6bbea98f708e872b58",
+  "swift": "Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)\nTarget: arm64-apple-macosx27.0.0",
+  "swift_sh": "0.2.0",
+  "dependency": "https://github.com/swift-library/swift-semver.git @ 0.1.1",
+  "command_exit_codes": [
+    0,
+    0,
+    0
+  ]
+}

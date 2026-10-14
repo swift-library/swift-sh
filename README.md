@@ -1,50 +1,50 @@
+<div align="center">
+
 <p align="center">
-  <img src="Documentation/Assets/Logo.svg" width="160" alt="swift-sh logo">
+  <a href="https://github.com/swift-library/swift-sh"><img src="Documentation/Assets/Logo.svg" width="160" alt="swift-sh logo"></a>
 </p>
 
 <h1 align="center">swift-sh</h1>
 
 <p align="center">
-  Run single-file Swift scripts with SwiftPM dependencies declared next to their imports.
+  Run single-file Swift scripts with package dependencies declared inline.
 </p>
 
 <p align="center">
   <a href="https://github.com/swift-library/swift-sh/actions/workflows/ci.yml"><img src="https://github.com/swift-library/swift-sh/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI"></a>
-  <img src="https://img.shields.io/badge/Swift-6.3%2B-F05138" alt="Swift 6.3+">
-  <img src="https://img.shields.io/badge/platforms-macOS%2015%2B%20%7C%20Linux-lightgrey" alt="Platforms: macOS 15+ | Linux">
-  <a href="LICENSE.txt"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0 WITH Swift-exception"></a>
+  <img src="https://img.shields.io/badge/Swift-6.3%2B-F05138?style=flat" alt="Swift 6.3+">
+  <img src="https://img.shields.io/badge/platforms-macOS%2015%2B%20%7C%20Linux-lightgrey?style=flat" alt="Platforms: macOS 15+ | Linux">
+  <a href="LICENSE.txt"><img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat" alt="License: Apache-2.0 WITH Swift-exception"></a>
 </p>
 
-[Overview](#overview) · [Install](#install) · [Quick start](#quick-start) ·
-[Usage](#usage) · [Requirements](#requirements) ·
-[Documentation](#documentation) · [Contributing](#contributing) ·
-[License](#license)
+<p align="center">
+  <a href="#overview">Overview</a> ·
+  <a href="#quick-look">Quick look</a> ·
+  <a href="#install">Install</a> ·
+  <a href="#usage">Usage</a> ·
+  <a href="#requirements">Requirements</a> ·
+  <a href="#documentation">Documentation</a> ·
+  <a href="#contributing">Contributing</a> ·
+  <a href="#license">License</a>
+</p>
 
-> [!NOTE]
-> swift-sh is pre-1.0. Minor releases may include breaking changes to its
-> commands and dependency comment syntax.
+</div>
 
 ## Overview
 
-swift-sh lets a single Swift file declare the packages it needs. Write a
-comment after an `import` that names the repository and version, and
-`swift sh` generates a SwiftPM package for the script, builds it in a cache,
-and runs it with your arguments. The script stays one file with no
-`Package.swift` to maintain. Swift runs the `swift-sh` executable on your
-`PATH` as the `swift sh` subcommand.
+Keep a script in one file, with no `Package.swift` to maintain. A trailing import comment names a dependency; `swift sh` builds the generated package in a cache and forwards your arguments. See [dependency comments](Documentation/Reference/DependencyComments.md) and the [command reference](Documentation/Reference/Commands.md) for syntax and execution rules.
 
-- Dependency comments for GitHub repositories, Git URLs, and local packages,
-  with `~>` and `==` version constraints. An import without a constraint
-  selects the newest release as its lower bound and caches that selection.
-- Imports read with SwiftParser, so comments and string literals never add
-  dependencies. Compiler errors keep the script's own line numbers.
-- Optimized builds, cached until the script, the contents of its local
-  dependencies, or the Swift toolchain change. `--debug` builds a debug
-  binary instead.
-- Scripts from a file, standard input, or a named pipe, with arguments,
-  standard streams, working directory, and exit status preserved.
-- `swift sh package` to turn a script into a standalone SwiftPM package, and
-  `swift sh open` to edit it in `$EDITOR` or Xcode.
+## Quick look
+
+Increment a version with SemVer:
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="Documentation/Assets/Demo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="Documentation/Assets/Demo-light.svg">
+    <img src="Documentation/Assets/Demo-light.svg" alt="Recorded terminal: cat version.swift shows the inline SemVer dependency; swift sh version.swift 1.2.3 prints 1.3.0, and a second run with 2.4.0 prints 2.5.0.">
+  </picture>
+</p>
 
 ## Install
 
@@ -68,158 +68,20 @@ swift build -c release --force-resolved-versions
 Copy `.build/release/swift-sh` to a directory on your `PATH`, then check the
 installation with `swift sh --version`.
 
-## Quick start
-
-Save this script as `greet.swift`. The comment after `import ArgumentParser`
-tells swift-sh which package provides the module and which versions to
-accept:
-
-```swift
-#!/usr/bin/swift sh
-import ArgumentParser  // apple/swift-argument-parser ~> 1.8
-
-@main
-struct Greet: ParsableCommand {
-  @Argument var name: String
-  @Option var count = 1
-
-  func run() {
-    for _ in 0..<count {
-      print("Hello, \(name)!")
-    }
-  }
-}
-```
-
-Make it executable and run it:
-
-```bash
-chmod +x greet.swift
-./greet.swift Swift --count 2
-```
-
-The script prints `Hello, Swift!` twice. The first run resolves Swift Argument
-Parser and builds the script with optimization, so it takes longer; later runs
-reuse the cached build. SwiftPM build output goes to standard error, so standard output carries
-only what the script prints.
-
-The shebang runs `/usr/bin/swift`. If Swift is installed somewhere else, or
-the file is not executable, run the script with
-`swift sh greet.swift Swift --count 2`.
-
-<p align="center">
-  <img src="Documentation/Assets/Demo.svg" alt="Terminal session: cat greet.swift shows the script with its swift-argument-parser dependency comment, then chmod +x greet.swift and ./greet.swift Swift --count 2 print Hello, Swift! twice">
-</p>
+> [!NOTE]
+> swift-sh is pre-1.0. Minor releases may include breaking changes to its
+> commands and dependency comment syntax.
 
 ## Usage
 
-### Declare dependencies
+Save a Swift file with a package comment after each dependency import, then run
+`swift sh version.swift 1.2.3`. Arguments after the file path go to the script;
+standard streams, working directory, and exit status are preserved.
 
-Add a dependency comment to each direct dependency's `import`. SwiftPM
-resolves transitive dependencies.
-
-```swift
-import ExampleKit      // @example
-import ArgumentParser  // apple/swift-argument-parser ~> 1.8
-import Markdown        // swiftlang/swift-markdown == 0.8.0
-import Charts          // git@github.com:example/charts.git ~> 2
-import Parsing         // ./Packages/Parsing
-```
-
-- `@owner` points to the GitHub repository with the same name as the module,
-  so `@example` above means `https://github.com/example/ExampleKit.git`.
-- `owner/repository` names a GitHub repository whose name differs from the
-  module.
-- HTTPS, SSH, SCP-style, and `file://` Git URLs are used as written.
-- A path that starts with `/`, `./`, `../`, or `~/` is a local package. Relative
-  paths resolve beside the script, or against the current directory for
-  standard input and named pipes.
-
-The imported module must match a library product of the package. `@testable`
-imports and specific imports such as `import struct Foo.Bar` are supported,
-and imports in every `#if` branch are collected.
-
-### Version constraints
-
-`~> 1.8` accepts versions up to the next major version, like SwiftPM's
-`from:` requirement, and `== 0.8.0` pins an exact version. Versions may omit
-the minor or patch number, use a `v` prefix, and include prerelease
-identifiers; prereleases are only used when you name one. A value that is not
-a version, such as `== b4de8c12`, is a Git revision.
-
-Without a constraint, the first build selects the newest release tag of the
-repository, ignoring prereleases, and depends on it like `~>`. swift-sh records
-that lower bound with the cached build and reuses it without another tag
-lookup. SwiftPM can resolve a later compatible version when the dependency
-graph changes. `swift sh cache clean` discards the selection; the next build
-selects again. Use `==` for an exact version. A repository with no release tags
-needs an explicit constraint.
-
-### Run scripts
-
-```bash
-swift sh greet.swift Swift          # run a file
-swift sh - Swift < greet.swift      # read the script from standard input
-swift sh --debug greet.swift Swift  # build and run a debug binary
-swift sh run package                # run a script named like a subcommand
-```
-
-Arguments after the script path, `-`, or `--` go to the script unchanged.
-Scripts build in release configuration; `--debug`, given before the script,
-builds a debug binary for faster compiles and debugger support. Each
-configuration keeps its own cached build.
-Scripts can use top-level code or an `@main` entry point. A script that runs
-replaces the swift-sh process and keeps its own exit status. Otherwise
-swift-sh exits with 0 for help and version, 2 for a command or build failure,
-and 3 for invalid usage.
-
-Script, cache, and local package paths can contain spaces and Unicode. SwiftPM
-cannot build paths with double quotes, backslashes, or control characters, and
-swift-sh reports such a path before it builds. Scripts and their dependencies
-run with your permissions, so review a script before you run it.
-
-### Package and edit scripts
-
-```bash
-swift sh package greet.swift         # create Greet/ beside the script
-swift sh package greet.swift --move  # move the script into the package
-swift sh open greet.swift            # open the generated source in $EDITOR
-swift sh open --xcode greet.swift    # open the generated package in Xcode
-```
-
-`package` adds each dependency to the new package with SwiftPM's own
-commands. It requires a swift-sh shebang such as `#!/usr/bin/swift sh`; pass
-`--force` to package any Swift file. Edits made through `open` change the
-cached copy only, and the next run uses the original script again. `--xcode`
-is available on macOS.
-
-### Manage the cache
-
-```bash
-swift sh cache clean              # remove every cached build
-swift sh cache clean greet.swift  # remove one script's build
-```
-
-Builds are cached in `~/Library/Caches/swift-sh` on macOS and
-`~/.cache/swift-sh` on Linux. Set `XDG_CACHE_HOME` to an absolute path to use
-`$XDG_CACHE_HOME/swift-sh` instead. Cleaning the whole cache also removes
-`~/Library/Developer/swift-sh.cache`, where releases before 0.2.0 kept builds.
-
-### Commands
-
-```bash
-swift sh [--debug] <script> [arguments]
-swift sh [--debug] - [arguments]
-swift sh [--debug] -- [arguments]
-swift sh run [--debug] <script> [arguments]
-swift sh package <script> [--force] [--move]
-swift sh open <script> [--xcode]
-swift sh cache clean [<script>]
-swift sh --version
-```
-
-`swift sh --help` prints this usage, and `swift sh help <command>` prints
-help for one command.
+The [dependency reference](Documentation/Reference/DependencyComments.md)
+covers repository forms, version constraints, and import discovery. The
+[command reference](Documentation/Reference/Commands.md) covers standard input,
+debug builds, packaging, editing, caching, and execution limits.
 
 ## Requirements
 
