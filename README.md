@@ -1,8 +1,10 @@
+<div align="center">
+
 <p align="center">
   <a href="https://github.com/swift-library/swift-sh"><img src="Documentation/Assets/Logo.svg" width="160" alt="swift-sh logo"></a>
 </p>
 
-<h1 align="center" dir="ltr">swift-sh</h1>
+<h1 align="center">swift-sh</h1>
 
 <p align="center">
   Run single-file Swift scripts with package dependencies declared inline.
@@ -25,6 +27,8 @@
   <a href="#contributing">Contributing</a> ·
   <a href="#license">License</a>
 </p>
+
+</div>
 
 ## Overview
 
