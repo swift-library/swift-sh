@@ -33,8 +33,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/swift-library/swift-semver",
       "state" : {
-        "revision" : "e03a776897fdf01ef1e3680bbad44b7e8795e15e",
-        "version" : "0.1.0"
+        "revision" : "3734f8489b89257083ff3fa94636488dd012da69",
+        "version" : "0.1.1"
       }
     },
     {
