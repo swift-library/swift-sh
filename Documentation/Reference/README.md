@@ -8,6 +8,8 @@ This directory holds supporting reference material for `swift-sh`.
 - [Dependency Comments](DependencyComments.md): import-comment dependency
   syntax, repository forms, local path rules, version constraints, and the
   release selection for imports without one.
+- [Release](Release.md): release facts and mechanics; version rules are in
+  VERSIONING.
 
 ## Placement Rules
 
