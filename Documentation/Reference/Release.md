@@ -13,7 +13,7 @@ not restate those rules.
 
 | Shipped component | Version meaning | Version source | Mirrors and derived fields | Update and read-only check |
 | --- | --- | --- | --- | --- |
-| `swift-sh` executable | Runtime version | `SwiftSh.version` in `Sources/SwiftSh/SwiftSh.swift` | `CHANGELOG.md` records release notes. | `Scripts/check-consumer` checks the runtime version against the source declaration. |
+| `swift-sh` executable | Runtime version | `SwiftSh.version` in `Sources/SwiftSh/SwiftSh.swift`, named by `version_file` in [`.github/release.json`](../../.github/release.json) | `CHANGELOG.md` records release notes. | `Scripts/check-consumer` checks the runtime version against the source declaration. |
 
 ## Compatibility Surface
 
@@ -53,5 +53,5 @@ Evidence belongs in `.build/release-validation`.
 | Version update and check | `Scripts/check-consumer` checks the runtime version against the source declaration. | Not established. |
 | Candidate validation and build | `Scripts/check` | Not established. |
 | Status and interrupted-run recovery | Not established. | Not established. |
-| Acceptance and publication | `Scripts/check-consumer` verifies fresh CLI installation; Homebrew distribution is owned by the organization tap and follows published GitHub Releases. | Not established. |
+| Acceptance and publication | Run [`Release`](../../.github/workflows/release.yml) with the accepted tag; it validates the tag and publishes the GitHub release. `Scripts/check-consumer` verifies fresh CLI installation; Homebrew distribution is owned by the organization tap and follows published GitHub Releases. | Repository write access to run workflows |
 | Cleanup | Not established. | Not established. |
