@@ -92,8 +92,9 @@ debug builds, packaging, editing, caching, and execution limits.
 Each release supports the three most recent major macOS versions, currently
 macOS 15, 26, and 27. CI tests macOS 15 and 26, and Linux with the Swift 6.3.3
 Ubuntu 22.04 container on Ubuntu 24.04 runners. The
-[versioning and release policy](Documentation/Architecture/VersioningAndRelease.md)
-describes compatibility and maintenance.
+[release reference](Documentation/Reference/Release.md) records release facts and
+mechanics; version rules are in
+[VERSIONING](https://github.com/swift-library/.github/blob/master/VERSIONING.md).
 
 ## Documentation
 

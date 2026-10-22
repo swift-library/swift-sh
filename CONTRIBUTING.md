@@ -43,7 +43,9 @@ network access.
 
 ## Releases and Security
 
-The [version policy](Documentation/Architecture/VersioningAndRelease.md) owns
-release and maintenance rules. Keep the runtime version, Changelog, dependency
-lock, and release configuration aligned. Use the private reporting route in
+The [release reference](Documentation/Reference/Release.md) records release facts
+and mechanics; version rules are in
+[VERSIONING](https://github.com/swift-library/.github/blob/master/VERSIONING.md).
+Keep the runtime version, Changelog, dependency lock, and release configuration
+aligned. Use the private reporting route in
 [SECURITY.md](SECURITY.md) for vulnerabilities.
