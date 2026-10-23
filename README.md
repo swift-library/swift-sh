@@ -40,9 +40,9 @@ Increment a version with SemVer:
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="Documentation/Assets/Demo-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="Documentation/Assets/Demo-light.svg">
-    <img src="Documentation/Assets/Demo-light.svg" alt="Recorded terminal: cat version.swift shows the inline SemVer dependency; swift sh version.swift 1.2.3 prints 1.3.0, and a second run with 2.4.0 prints 2.5.0.">
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/terminal/terminal-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset=".github/assets/terminal/terminal-light.svg">
+    <img src=".github/assets/terminal/terminal-light.svg" alt="Recorded terminal: cat version.swift shows the inline SemVer dependency; swift sh version.swift 1.2.3 prints 1.3.0, and a second run with 2.4.0 prints 2.5.0.">
   </picture>
 </p>
 
@@ -111,8 +111,8 @@ mechanics; version rules are in
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request, and run
-`Scripts/check` before submitting changes. Report vulnerabilities through the
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for the build, test, and formatting commands
+to run before opening a pull request. Report vulnerabilities through the
 private route in [SECURITY.md](SECURITY.md).
 
 ## License

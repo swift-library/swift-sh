@@ -9,13 +9,20 @@ verify changes with SwiftPM. Maintainers follow the shared
 Run the repository checks from the root:
 
 ```sh
-Scripts/check
+swift build
+swift test
+swift build -c release
+xcrun swift-format lint --strict --configuration .swift-format --recursive \
+  Package.swift Sources Tests Examples \
+  Examples/markdown Examples/terminal-rainbow Examples/async-main-count-lines
 ```
 
-This validates strict formatting, Swift tests, a Release
-build, and an independent script consumer. CI validates the minimum supported
-Swift toolchain with its matching SDK. The package requires Swift 6.3, macOS 15
-or Linux; macOS source builds require the SDK from Xcode 26 or newer.
+The paths match `format.paths` in [`.github/swift-package.json`](.github/swift-package.json),
+which declares the compiler matrix, platforms, and terminal demo for shared CI.
+The required checks are `policy / policy` and `validate / result`. The package
+requires Swift 6.3, macOS 15 or Linux; macOS source builds require the SDK from
+Xcode 26 or newer. See [the terminal demo reference](Documentation/Reference/TerminalDemo.md)
+for recording and checking the README example.
 
 For a custom SwiftPM scratch directory, set `SWIFT_SH_TEST_BINARY` to its built
 swift-sh executable before running the integration tests. Tests use isolated

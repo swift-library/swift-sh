@@ -1,7 +1,8 @@
 # Release
 
-Release status: partly manual; `.github/release.json` selects validation and
-`Scripts/check` runs local acceptance.
+[`.github/swift-package.json`](../../.github/swift-package.json) declares package
+validation. The callers in `.github/workflows/` pin the shared validation,
+policy, and release workflows from `swift-library/github-workflows`.
 
 Version rules for swift-sh, covering tags, release timing, choosing the
 next version and the changelog, are in
@@ -13,7 +14,7 @@ not restate those rules.
 
 | Shipped component | Version meaning | Version source | Mirrors and derived fields | Update and read-only check |
 | --- | --- | --- | --- | --- |
-| `swift-sh` executable | Runtime version | `SwiftSh.version` in `Sources/SwiftSh/SwiftSh.swift`, named by `version_file` in [`.github/release.json`](../../.github/release.json) | `CHANGELOG.md` records release notes. | `Scripts/check-consumer` checks the runtime version against the source declaration. |
+| `swift-sh` executable | Runtime version | `SwiftSh.version` in `Sources/SwiftSh/SwiftSh.swift`, named by `version_file` in [`.github/release.json`](../../.github/release.json) | `CHANGELOG.md` records release notes. | The shared version validator checks the declaration and changelog; `swift test` checks CLI version output. |
 
 ## Compatibility Surface
 
@@ -24,34 +25,28 @@ system requirements.
 ## Dependencies and Verified Combinations
 
 The package requires Swift 6.3, macOS 15 or Linux with a supported toolchain.
-The maintained macOS window is 15/26/27. CI tests macOS 15 and 26 and Linux
-with the digest-pinned Swift 6.3.3 Ubuntu image. Strict formatting runs separately.
+The maintained macOS window is 15/26/27. CI tests macOS 15 with Xcode 26.0.1 and
+Swift 6.3.3, macOS 26 with Xcode 26.6, and Linux with the digest-pinned Swift
+6.3.3 Ubuntu image. Strict formatting runs on the last declared compiler.
 Local acceptance also covers native macOS 27.
 
-## Derived Metadata and Drift Checks
+## Validation
 
-`Scripts/check` runs formatting, Swift tests, a release build and an independent
-script consumer. `Scripts/check-consumer` checks version/help, argument errors
-and a script using a remote SemVer dependency.
+Run `swift build`, `swift test`, `swift build -c release`, and strict
+`swift-format` lint over the declared paths. The exact local commands are in
+[CONTRIBUTING.md](../../CONTRIBUTING.md).
 
-## Candidate, Acceptance and Publication
+Tests cover CLI version/help, usage errors, argument forwarding, and script
+execution with local and tagged Git dependencies. The shared demo job builds
+the release executable and checks the [terminal recording](TerminalDemo.md).
+The required checks are `policy / policy` and `validate / result`.
 
-`Scripts/check-consumer` accepts a remote repository and a revision or version
-to verify fresh CLI installation.
+## Acceptance and Publication
+
+The [`Release` workflow](../../.github/workflows/release.yml) runs when a `v*`
+tag is pushed. It validates the tagged commit, then verifies the signed
+annotated tag, version declaration, and changelog before publishing the release
+notes. Its accepted commit is the same commit that validation checked.
 
 Homebrew distribution is owned by the organization tap and follows published
 GitHub Releases. Repository-specific security reporting is in `SECURITY.md`.
-
-## Evidence Reuse and Invalidation
-
-Evidence belongs in `.build/release-validation`.
-
-## Entry Points and Artifact Retention
-
-| Operation | Existing command or explicit manual procedure | Required access |
-| --- | --- | --- |
-| Version update and check | `Scripts/check-consumer` checks the runtime version against the source declaration. | Not established. |
-| Candidate validation and build | `Scripts/check` | Not established. |
-| Status and interrupted-run recovery | Not established. | Not established. |
-| Acceptance and publication | Run [`Release`](../../.github/workflows/release.yml) with the accepted tag; it validates the tag and publishes the GitHub release. `Scripts/check-consumer` verifies fresh CLI installation; Homebrew distribution is owned by the organization tap and follows published GitHub Releases. | Repository write access to run workflows |
-| Cleanup | Not established. | Not established. |
