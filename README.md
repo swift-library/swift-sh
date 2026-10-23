@@ -92,7 +92,7 @@ debug builds, packaging, editing, caching, and execution limits.
 Each release supports the three most recent major macOS versions, currently
 macOS 15, 26, and 27. Shared macOS CI builds and tests with Xcode 26.6 on
 macOS 26; the latest SDK checks availability for older supported systems at
-compile time. Linux CI uses the Swift 6.3.3 Ubuntu 22.04 container on Ubuntu
+compile time. Linux CI uses the Swift 6.3.3 Ubuntu 24.04 container on Ubuntu
 24.04 runners. The
 [release reference](Documentation/Reference/Release.md) records release facts and
 mechanics; version rules are in
