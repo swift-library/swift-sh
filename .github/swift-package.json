@@ -21,7 +21,7 @@
     "linux": [
       {
         "name": "linux-swift-6.3",
-        "image": "swift:6.3.3-jammy@sha256:2f3a1d7bb74da95c4857514589667a58087fdaf34f11e424d47854bebd710cf2"
+        "image": "swift:6.3.3-noble@sha256:c2f3ac2eb806ce43f68859c3d52bd3bb1cfc88672fb3a948b76e136d98e39278"
       }
     ]
   },
