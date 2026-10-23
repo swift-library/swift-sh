@@ -18,10 +18,11 @@ xcrun swift-format lint --strict --configuration .swift-format --recursive \
 ```
 
 The paths match `format.paths` in [`.github/swift-package.json`](.github/swift-package.json),
-which declares the compiler matrix, platforms, and terminal demo for shared CI.
-The required checks are `policy / policy` and `validate / result`. The package
-requires Swift 6.3, macOS 15 or Linux; macOS source builds require the SDK from
-Xcode 26 or newer. See [the terminal demo reference](Documentation/Reference/TerminalDemo.md)
+which declares Xcode 26.6 on macOS 26 as the sole macOS compiler, plus platforms
+and the terminal demo for shared CI. The required checks are `policy / policy`
+and `validate / result`. The package requires Swift 6.3, macOS 15 or Linux;
+macOS source builds require the SDK from Xcode 26.6 or newer. See
+[the terminal demo reference](Documentation/Reference/TerminalDemo.md)
 for recording and checking the README example.
 
 For a custom SwiftPM scratch directory, set `SWIFT_SH_TEST_BINARY` to its built

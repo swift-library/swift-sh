@@ -25,10 +25,11 @@ system requirements.
 ## Dependencies and Verified Combinations
 
 The package requires Swift 6.3, macOS 15 or Linux with a supported toolchain.
-The maintained macOS window is 15/26/27. CI tests macOS 15 with Xcode 26.0.1 and
-Swift 6.3.3, macOS 26 with Xcode 26.6, and Linux with the digest-pinned Swift
-6.3.3 Ubuntu image. Strict formatting runs on the last declared compiler.
-Local acceptance also covers native macOS 27.
+The maintained macOS window is 15/26/27. Shared macOS CI builds and tests only
+with Xcode 26.6 on macOS 26, using its bundled Swift 6.3 compiler. The latest
+SDK checks API availability for older supported systems at compile time.
+Linux CI uses the digest-pinned Swift 6.3.3 Ubuntu image. Strict formatting
+runs with Xcode 26.6. Local acceptance also covers native macOS 27.
 
 ## Validation
 

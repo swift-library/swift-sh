@@ -16,7 +16,7 @@ parsing; script-specific abbreviations and revision fallback belong to
 SwiftSh. SHA-256 uses CryptoKit on macOS and Swift Crypto on Linux.
 
 The package uses Swift 6.3 and supports macOS 15 and Linux. Its macOS source
-build needs the SDK from Xcode 26 or newer for Swift Subprocess. Dependency
+build needs the SDK from Xcode 26.6 or newer for Swift Subprocess. Dependency
 ranges and `Package.resolved` constrain the supported compiler line.
 
 ## Commands
