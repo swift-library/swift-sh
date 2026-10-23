@@ -1,0 +1,22 @@
+title: swift-sh · inline package dependencies
+executable: swift-sh
+files:
+  project/version.swift: |
+    #!/usr/bin/swift sh
+    import SemVer  // swift-library/swift-semver == 0.1.1
+
+    let version = try Version(parsing: CommandLine.arguments[1])
+    print(try version.incrementing(.minor))
+steps:
+  - run: cat version.swift
+  - run: |
+      GIT_ALLOW_PROTOCOL=file:https swift sh version.swift 1.2.3 2>build.log || {
+        cat build.log >&2
+        swift sh cache clean version.swift
+        exit 1
+      }
+    show: false
+  - run: swift sh version.swift 1.2.3
+  - run: swift sh version.swift 2.4.0
+  - run: swift sh cache clean version.swift
+    show: false

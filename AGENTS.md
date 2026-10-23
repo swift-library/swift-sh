@@ -23,6 +23,8 @@ points.
   files.
 - For SwiftPM package changes, keep `Package.swift`, `Package.resolved`, and
   the CI workflow aligned.
+- For CI validation changes, edit `.github/swift-package.json`; use the commands
+  in `CONTRIBUTING.md` for local validation.
 - Before changing versions, dependencies, packaging or release workflows, read
   `VERSIONING.md`, or the organization VERSIONING the project adopts, for
   version rules and `Documentation/Reference/Release.md` for this repository's

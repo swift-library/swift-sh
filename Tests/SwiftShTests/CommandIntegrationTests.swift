@@ -22,6 +22,8 @@ struct CommandIntegrationTests {
     let error = try await fixture.invoke(["package", "--unknown"])
     #expect(error.status == .exited(3))
     #expect(error.stderr.contains("invalid usage"))
+    let extra = try await fixture.invoke(["--version", "extra"])
+    #expect(extra.status == .exited(3))
   }
 
   @Test func argumentsInputAndWorkingDirectory() async throws {
@@ -159,6 +161,22 @@ struct CommandIntegrationTests {
     #expect(try await fixture.invoke([script.string]).stdout == "2\n")
     #expect(try await fixture.invoke(["cache", "clean", script.string]).status == .exited(0))
     #expect(try await fixture.invoke([script.string]).stdout == "4\n")
+  }
+
+  @Test func mainEntryWithExactDependency() async throws {
+    let fixture = try await CommandFixture()
+    let repository = try await GitRepository(at: fixture.library())
+    try await repository.commitAll()
+    try await repository.tag("1.0.0")
+    let script = try fixture.script(
+      """
+      #!/usr/bin/swift sh
+      import Fixture // \(repository.url) == 1.0.0
+      @main struct Program { static func main() { print(value()) } }
+      """)
+    let result = try await fixture.invoke([script.string])
+    #expect(result.status == .exited(0), "\(result.stderr)")
+    #expect(result.stdout == "1\n")
   }
 
   @Test func generatedCopiesProtectUserSource() async throws {

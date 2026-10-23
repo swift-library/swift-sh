@@ -1,0 +1,17 @@
+{
+  "title": "swift-sh · inline package dependencies",
+  "steps": [
+    {
+      "command": "cat version.swift",
+      "output": "#!/usr/bin/swift sh\nimport SemVer  // swift-library/swift-semver == 0.1.1\n\nlet version = try Version(parsing: CommandLine.arguments[1])\nprint(try version.incrementing(.minor))"
+    },
+    {
+      "command": "swift sh version.swift 1.2.3",
+      "output": "1.3.0"
+    },
+    {
+      "command": "swift sh version.swift 2.4.0",
+      "output": "2.5.0"
+    }
+  ]
+}

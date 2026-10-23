@@ -5,7 +5,7 @@ This directory indexes repository-native documentation for `swift-sh`.
 ## Areas
 
 - [Terminal demonstration](Reference/TerminalDemo.md): recorded README example,
-  shared design pin, and generated light/dark assets.
+  terminal script, and generated light/dark assets.
 - [Release](Reference/Release.md): release facts and mechanics; version rules are
   in VERSIONING.
 
