@@ -57,8 +57,9 @@ points.
 - Flag a change to the compatibility surface recorded in
   `Documentation/Reference/Release.md`, such as public API, observable
   behavior or a raised minimum platform or Swift version, without the
-  changelog entry and version bump VERSIONING requires. Safe path: record the
-  change under the next version with that bump.
+  changelog entry VERSIONING requires. Safe path: record the change under
+  `## Unreleased`; mark raised deployment or Swift minimums **Breaking** and
+  name the new minimums. Apply the required version bump when preparing a release.
 
 ### Claims
 

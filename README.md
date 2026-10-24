@@ -55,7 +55,7 @@ brew install swift-library/tap/swift-sh
 ```
 
 The formula builds swift-sh from its release source, so Swift 6.3 or later
-must be on `PATH`. On macOS, select Xcode 26 or later with `xcode-select`.
+must be on `PATH`. On macOS, select Xcode 26.6 or later with `xcode-select`.
 
 To build from source instead:
 
@@ -87,11 +87,13 @@ debug builds, packaging, editing, caching, and execution limits.
 
 - Swift 6.3 or later on `PATH`, for both swift-sh and the scripts it builds
 - macOS 15 or later, or Linux with a supported Swift toolchain
-- On macOS, building swift-sh requires the macOS SDK from Xcode 26 or later
+- On macOS, building swift-sh requires the macOS SDK from Xcode 26.6 or later
 
 Each release supports the three most recent major macOS versions, currently
-macOS 15, 26, and 27. CI tests macOS 15 and 26, and Linux with the Swift 6.3.3
-Ubuntu 22.04 container on Ubuntu 24.04 runners. The
+macOS 15, 26, and 27. Shared macOS CI builds and tests with Xcode 26.6 on
+macOS 26; the latest SDK checks availability for older supported systems at
+compile time. Linux CI uses the Swift 6.3.3 Ubuntu 24.04 container on Ubuntu
+24.04 runners. The
 [release reference](Documentation/Reference/Release.md) records release facts and
 mechanics; version rules are in
 [VERSIONING](https://github.com/swift-library/.github/blob/master/VERSIONING.md).

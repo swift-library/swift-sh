@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Breaking**: Adopt the organization toolchain policy: Swift 6.3 or later and macOS 15 or later, with macOS 15, 26, and 27 maintained. Shared macOS CI builds and tests with Xcode 26.6 on macOS 26.
+
 ## 0.2.0
 
 ### Upgrade notes
