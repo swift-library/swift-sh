@@ -8,7 +8,7 @@ points.
 - Name the behavior, root cause, invariant, owner, data flow, and validation
   before changing reusable files.
 - Change the owning layer, not the nearest convenient file.
-- Keep changes traceable to the request, source evidence, or owning invariant.
+- Keep changes traceable to the request, a cited source, or the owning invariant.
 - Validate with package-local checks when behavior changes.
 
 ## Task Route
