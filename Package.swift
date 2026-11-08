@@ -16,7 +16,7 @@ let package = Package(
     .package(url: "https://github.com/swiftlang/swift-syntax", "604.0.0"..<"605.0.0"),
     .package(url: "https://github.com/apple/swift-system", "1.8.1"..<"1.9.0"),
     .package(url: "https://github.com/swiftlang/swift-subprocess", "1.0.0"..<"1.1.0"),
-    .package(url: "https://github.com/apple/swift-crypto", "5.0.0"..<"5.1.0"),
+    .package(url: "https://github.com/apple/swift-crypto", "5.0.0"..<"6.0.0"),
     .package(url: "https://github.com/swift-library/swift-semver", .upToNextMinor(from: "0.1.0")),
   ],
   targets: [
